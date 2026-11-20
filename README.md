@@ -12,29 +12,18 @@
 - `.github/workflows` - CI (web build/lint, api lint/tests, docker compose config)
 - `docker-compose.yml` - local dev stack (web, api, postgres, redis)
 
-## Local run (Docker Compose)
-
-1. Copy env files:
-   - `copy apps\api\.env.example apps\api\.env`
-   - `copy apps\web\.env.example apps\web\.env`
-2. Start stack:
-   - `docker compose up --build`
-3. Open web: `http://localhost:5173` (API: `http://localhost:8000`, health: `/health`)
-
-## Local run (without Docker)
+## Local run (no Docker, easiest)
 
 ### API
 
 ```bash
 cd apps/api
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-pip install -e .[dev]
+pip install -r requirements.txt
 copy .env.example .env
-uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-Check: `GET http://localhost:8000/health`
+Uses SQLite by default (`boju_dev.db`) and in-memory fallback when Redis is unavailable. Check: `GET http://localhost:8000/health`
 
 ### Web
 
@@ -46,6 +35,15 @@ npm run dev
 ```
 
 Open: http://localhost:5173
+
+## Local run (Docker Compose, optional)
+
+1. Copy env files:
+   - `copy apps\api\.env.example apps\api\.env`
+   - `copy apps\web\.env.example apps\web\.env`
+2. Set `DATABASE_URL`/`REDIS_URL` for Postgres/Redis services if needed, then start:
+   - `docker compose up --build`
+3. Open web: `http://localhost:5173` (API: `http://localhost:8000`)
 
 ## Tests / lint
 
@@ -93,4 +91,4 @@ npm run build
 
 - Room/game/round state is in-memory (Redis-backed scaling hooks can be added later).
 - Phase 4 is a playable prototype: client relays movement state and tagging intents over room WebSocket while server manages phases/teams/elimination/win conditions. Further hardening can add authoritative movement validation, prop system, voice/noise mechanics, anti-cheat, persistence, and deployment polish.
-- This workspace copy is not a git repository.
+- No-Docker local run is supported (SQLite + in-memory rate-limit fallback). Redis/Postgres/Docker are optional and not required for basic local functionality.
