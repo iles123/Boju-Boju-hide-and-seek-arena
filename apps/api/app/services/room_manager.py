@@ -567,6 +567,14 @@ class RoomManager:
             if not player or not player.connected:
                 return
             # store latest lightweight state for newcomers/snapshots
+            paint = payload.get("paintColor", payload.get("paint_color", "#f8fafc"))
+            paint = str(paint) if isinstance(paint, str) else "#f8fafc"
+            if not paint.startswith("#") or len(paint) > 16:
+                paint = "#f8fafc"
+            pose = payload.get("pose", "stand")
+            pose = str(pose) if isinstance(pose, str) else "stand"
+            if pose not in ("stand", "crouch", "prone", "tuck"):
+                pose = "stand"
             state = {
                 "user_id": user_id,
                 "username": player.username,
@@ -580,6 +588,8 @@ class RoomManager:
                 "pitch": float(payload.get("pitch", 0.0)),
                 "mode": str(payload.get("mode", "first")),
                 "locked": bool(payload.get("locked", False)),
+                "paintColor": paint,
+                "pose": pose,
                 "ts": utcnow().isoformat(),
             }
             room.player_states[user_id] = state

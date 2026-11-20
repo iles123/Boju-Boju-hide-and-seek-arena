@@ -9,7 +9,7 @@ import { PlayerRig, type PlayerPose } from "./components/PlayerRig";
 import { SpectatorRig } from "./components/SpectatorRig";
 import { MouseLook } from "./MouseLook";
 import { VirtualControls } from "./VirtualControls";
-import { useGameStore } from "./store";
+import { useGameStore, type HiderPose } from "./store";
 
 type RemoteState = {
   user_id?: string;
@@ -20,9 +20,52 @@ type RemoteState = {
   x?: number; y?: number; z?: number;
   yaw?: number; pitch?: number;
   mode?: string; locked?: boolean;
+  paintColor?: string;
+  pose?: string;
 };
 
-function RemoteHumanoid({ color, moving, locked, speed }: { color: string; moving: boolean; locked: boolean; speed: number }) {
+const PALETTE = ["#f8fafc", "#facc15", "#fb7185", "#38bdf8", "#4ade80", "#a78bfa", "#f97316", "#64748b", "#92400e", "#16a34a"];
+
+function CamouflageFormRemote({ pose, color, locked }: { pose: string; color: string; locked: boolean }) {
+  const g = useRef<THREE.Group>(null);
+  const t = useRef(Math.random() * 10);
+  useFrame((_, dt) => {
+    t.current += dt;
+    if (!g.current) return;
+    const wobble = locked ? Math.sin(t.current * 2.2) * 0.008 : Math.sin(t.current * 1.8) * 0.015;
+    g.current.scale.setScalar(1 + wobble);
+  });
+  const emissive = locked ? color : "#000000";
+  const ei = locked ? 0.12 : 0;
+  if (pose === "prone") {
+    return (
+      <group ref={g}>
+        <mesh castShadow position={[0, 0.22, 0]}><boxGeometry args={[1.1, 0.35, 1.1]} /><meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={ei} roughness={0.85} /></mesh>
+      </group>
+    );
+  }
+  if (pose === "tuck") {
+    return (
+      <group ref={g}>
+        <mesh castShadow position={[0, 0.65, 0]}><cylinderGeometry args={[0.32, 0.38, 1.2, 12]} /><meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={ei} roughness={0.8} /></mesh>
+      </group>
+    );
+  }
+  if (pose === "crouch") {
+    return (
+      <group ref={g}>
+        <mesh castShadow position={[0, 0.38, 0]}><boxGeometry args={[0.78, 0.68, 0.78]} /><meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={ei} roughness={0.85} /></mesh>
+      </group>
+    );
+  }
+  return (
+    <group ref={g}>
+      <mesh castShadow position={[0, 0.62, 0]}><boxGeometry args={[0.74, 1.05, 0.74]} /><meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={ei} roughness={0.82} /></mesh>
+    </group>
+  );
+}
+
+function HunterRemote({ moving, speed }: { moving: boolean; speed: number }) {
   const g = useRef<THREE.Group>(null);
   const lLeg = useRef<THREE.Mesh>(null);
   const rLeg = useRef<THREE.Mesh>(null);
@@ -31,59 +74,52 @@ function RemoteHumanoid({ color, moving, locked, speed }: { color: string; movin
   const t = useRef(Math.random() * Math.PI * 2);
   useFrame((_, dt) => {
     t.current += dt;
-    const speedFactor = THREE.MathUtils.clamp(speed / 4, 0.6, 1.8);
-    const swing = moving && !locked ? Math.sin(t.current * (10.5 * speedFactor)) * 0.55 : 0;
-    const idle = Math.sin(t.current * 2.2) * 0.03;
+    const sf = THREE.MathUtils.clamp(speed / 4, 0.6, 1.8);
+    const swing = moving ? Math.sin(t.current * 10.5 * sf) * 0.5 : 0;
     if (lLeg.current) lLeg.current.rotation.x = swing;
     if (rLeg.current) rLeg.current.rotation.x = -swing;
     if (lArm.current) lArm.current.rotation.x = -swing * 0.8;
     if (rArm.current) rArm.current.rotation.x = swing * 0.8;
-    if (g.current) {
-      g.current.position.y = locked ? 0 : idle * 0.4;
-      const s = locked ? 1 + Math.sin(t.current * 2.5) * 0.012 : 1 + Math.sin(t.current * 1.8) * 0.004;
-      g.current.scale.setScalar(s);
-    }
+    if (g.current) g.current.position.y = Math.sin(t.current * 2.2) * 0.02;
   });
-  if (locked) {
-    return (
-      <group ref={g}>
-        <mesh castShadow position={[0, 0.55, 0]}>
-          <boxGeometry args={[0.82, 0.9, 0.82]} />
-          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={0.18} />
-        </mesh>
-        <mesh castShadow position={[0, 1.08, 0]}>
-          <boxGeometry args={[0.52, 0.18, 0.52]} />
-          <meshStandardMaterial color="#14532d" />
-        </mesh>
-      </group>
-    );
-  }
   return (
     <group ref={g}>
-      <mesh castShadow position={[0, 0.78, 0]}>
-        <boxGeometry args={[0.5, 0.62, 0.3]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      <mesh castShadow position={[0, 1.28, 0]}>
-        <boxGeometry args={[0.34, 0.34, 0.34]} />
-        <meshStandardMaterial color="#f1c27d" />
-      </mesh>
-      <mesh ref={lLeg} castShadow position={[-0.13, 0.32, 0]}>
-        <boxGeometry args={[0.16, 0.46, 0.18]} />
-        <meshStandardMaterial color="#1f2937" />
-      </mesh>
-      <mesh ref={rLeg} castShadow position={[0.13, 0.32, 0]}>
-        <boxGeometry args={[0.16, 0.46, 0.18]} />
-        <meshStandardMaterial color="#1f2937" />
-      </mesh>
-      <mesh ref={lArm} castShadow position={[-0.36, 0.82, 0]}>
-        <boxGeometry args={[0.12, 0.42, 0.14]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
-      <mesh ref={rArm} castShadow position={[0.36, 0.82, 0]}>
-        <boxGeometry args={[0.12, 0.42, 0.14]} />
-        <meshStandardMaterial color={color} />
-      </mesh>
+      <mesh castShadow position={[0, 0.82, 0]}><boxGeometry args={[0.56, 0.64, 0.36]} /><meshStandardMaterial color="#b91c1c" metalness={0.25} roughness={0.45} /></mesh>
+      <mesh castShadow position={[0, 1.32, 0]}><boxGeometry args={[0.36, 0.34, 0.36]} /><meshStandardMaterial color="#7f1d1d" /></mesh>
+      <mesh castShadow position={[0, 1.38, 0.19]}><boxGeometry args={[0.24, 0.1, 0.04]} /><meshStandardMaterial color="#67e8f9" emissive="#22d3ee" emissiveIntensity={0.5} /></mesh>
+      <mesh ref={lLeg} castShadow position={[-0.14, 0.33, 0]}><boxGeometry args={[0.17, 0.48, 0.19]} /><meshStandardMaterial color="#1f2937" /></mesh>
+      <mesh ref={rLeg} castShadow position={[0.14, 0.33, 0]}><boxGeometry args={[0.17, 0.48, 0.19]} /><meshStandardMaterial color="#1f2937" /></mesh>
+      <mesh ref={lArm} castShadow position={[-0.4, 0.84, 0]}><boxGeometry args={[0.13, 0.44, 0.15]} /><meshStandardMaterial color="#991b1b" /></mesh>
+      <mesh ref={rArm} castShadow position={[0.4, 0.84, 0]}><boxGeometry args={[0.13, 0.44, 0.15]} /><meshStandardMaterial color="#991b1b" /></mesh>
+    </group>
+  );
+}
+
+function ChameleonRemote({ color, moving, speed }: { color: string; moving: boolean; speed: number }) {
+  const g = useRef<THREE.Group>(null);
+  const lLeg = useRef<THREE.Mesh>(null);
+  const rLeg = useRef<THREE.Mesh>(null);
+  const lArm = useRef<THREE.Mesh>(null);
+  const rArm = useRef<THREE.Mesh>(null);
+  const t = useRef(Math.random() * Math.PI * 2);
+  useFrame((_, dt) => {
+    t.current += dt;
+    const sf = THREE.MathUtils.clamp(speed / 4, 0.6, 1.8);
+    const swing = moving ? Math.sin(t.current * 10.2 * sf) * 0.45 : 0;
+    if (lLeg.current) lLeg.current.rotation.x = swing;
+    if (rLeg.current) rLeg.current.rotation.x = -swing;
+    if (lArm.current) lArm.current.rotation.x = -swing * 0.8;
+    if (rArm.current) rArm.current.rotation.x = swing * 0.8;
+    if (g.current) g.current.position.y = Math.sin(t.current * 2.1) * 0.02;
+  });
+  return (
+    <group ref={g}>
+      <mesh castShadow position={[0, 0.78, 0]}><boxGeometry args={[0.48, 0.58, 0.32]} /><meshStandardMaterial color={color} roughness={0.55} /></mesh>
+      <mesh castShadow position={[0, 1.24, 0.02]}><sphereGeometry args={[0.19, 16, 16]} /><meshStandardMaterial color={color} roughness={0.5} /></mesh>
+      <mesh ref={lLeg} castShadow position={[-0.13, 0.32, 0]}><boxGeometry args={[0.15, 0.44, 0.17]} /><meshStandardMaterial color="#334155" /></mesh>
+      <mesh ref={rLeg} castShadow position={[0.13, 0.32, 0]}><boxGeometry args={[0.15, 0.44, 0.17]} /><meshStandardMaterial color="#334155" /></mesh>
+      <mesh ref={lArm} castShadow position={[-0.34, 0.8, 0]}><boxGeometry args={[0.11, 0.4, 0.13]} /><meshStandardMaterial color={color} /></mesh>
+      <mesh ref={rArm} castShadow position={[0.34, 0.8, 0]}><boxGeometry args={[0.11, 0.4, 0.13]} /><meshStandardMaterial color={color} /></mesh>
     </group>
   );
 }
@@ -111,14 +147,18 @@ function RemotePlayer({ state, label }: { state: RemoteState; label: string }) {
   });
   const isSpectator = state.is_spectator || state.team === "spectator" || state.alive === false;
   if (isSpectator) return null;
-  const locked = !!state.locked && state.team !== "seeker";
-  const color = state.team === "seeker" ? "#dc2626" : locked ? "#16a34a" : "#2563eb";
+  const isSeeker = state.team === "seeker";
+  const pose = (state.pose as string) || "stand";
+  const paint = state.paintColor || "#94a3b8";
+  const locked = !!state.locked && !isSeeker;
+  const useCamouflage = !isSeeker && (locked || pose !== "stand");
+  const tag = isSeeker ? " [Hunter]" : locked ? " [blended]" : (pose !== "stand" ? ` [${pose}]` : "");
   return (
     <group ref={ref} position={[state.x ?? 0, state.y ?? 2, state.z ?? 20]}>
-      <RemoteHumanoid color={color} moving={moving.current} locked={locked} speed={moveSpeed.current} />
-      <Html position={[0, 1.7, 0]} center distanceFactor={14} style={{ pointerEvents: "none" }}>
-        <div style={{ background: "rgba(15,23,42,0.78)", color: "#fff", padding: "2px 6px", borderRadius: 6, fontSize: 11, whiteSpace: "nowrap" }}>
-          {label}{state.team === "seeker" ? " [S]" : ""}{locked ? " [camouflaged]" : ""}
+      {isSeeker ? <HunterRemote moving={moving.current} speed={moveSpeed.current} /> : useCamouflage ? <CamouflageFormRemote pose={pose} color={paint} locked={locked} /> : <ChameleonRemote color={paint} moving={moving.current} speed={moveSpeed.current} />}
+      <Html position={[0, 1.75, 0]} center distanceFactor={14} style={{ pointerEvents: "none" }}>
+        <div style={{ background: "rgba(15,23,42,0.78)", color: "#fff", padding: "2px 6px", borderRadius: 6, fontSize: 11, whiteSpace: "nowrap", border: isSeeker ? "1px solid #ef4444" : "1px solid #22c55e" }}>
+          {label}{tag}
         </div>
       </Html>
     </group>
@@ -149,7 +189,7 @@ function TagDetector({ enabled, myPoseRef, remoteStates, players, bestRef, onBes
       if (!rs) continue;
       const dx = (rs.x ?? 0) - me.x; const dy = (rs.y ?? 0) - me.y; const dz = (rs.z ?? 0) - me.z;
       const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      if (d < 2.6 && d < bestD) { bestD = d; best = p.user_id; }
+      if (d < 2.7 && d < bestD) { bestD = d; best = p.user_id; }
     }
     bestRef.current = best;
     onBest?.(best);
@@ -183,8 +223,9 @@ function ArenaScene({ room, meId, myPlayer, remoteStates, send, myPoseRef, bestT
 
   return (
     <>
-      <ambientLight intensity={0.65} />
-      <directionalLight position={[10, 20, 10]} intensity={1.1} castShadow />
+      <ambientLight intensity={0.75} />
+      <directionalLight position={[10, 20, 10]} intensity={1.15} castShadow />
+      <hemisphereLight args={["#dbeafe", "#86a873", 0.35]} />
       <Physics gravity={[0, -9.81, 0]}>
         <GreyboxMap />
         {isPlayable && (
@@ -194,8 +235,7 @@ function ArenaScene({ room, meId, myPlayer, remoteStates, send, myPoseRef, bestT
             canMove={canMove}
             allowJump={canMove}
             spawn={spawn}
-            bodyColor={role === "seeker" ? "#dc2626" : "#2563eb"}
-            lockedColor="#16a34a"
+            isSeeker={role === "seeker"}
             onPose={(pose) => {
               myPoseRef.current = pose;
               send("player.state", pose);
@@ -209,8 +249,8 @@ function ArenaScene({ room, meId, myPlayer, remoteStates, send, myPoseRef, bestT
       </Physics>
       <MouseLook yawRef={yawRef} pitchRef={pitchRef} active={true} />
       {(mode === "spectator" || !isPlayable) && <SpectatorRig yawRef={yawRef} pitchRef={pitchRef} />}
-      <color attach="background" args={["#dbeafe"]} />
-      <fog attach="fog" args={["#dbeafe", 30, 120]} />
+      <color attach="background" args={["#bfdbfe"]} />
+      <fog attach="fog" args={["#bfdbfe", 25, 110]} />
     </>
   );
 }
@@ -234,6 +274,11 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, send }: {
   const [eventMsg, setEventMsg] = useState<string | null>(null);
   const [canTagNow, setCanTagNow] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const paintColor = useGameStore((s) => s.paintColor);
+  const setPaintColor = useGameStore((s) => s.setPaintColor);
+  const pose = useGameStore((s) => s.pose);
+  const setPose = useGameStore((s) => s.setPose);
+  const locked = useGameStore((s) => s.locked);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
 
   useEffect(() => {
@@ -253,13 +298,13 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, send }: {
   const doTag = () => {
     if (seekerCanTag && bestTagRef.current) {
       send("player.tag", { target_id: bestTagRef.current });
-      setEventMsg("Tagged!");
+      setEventMsg("Tagged a chameleon!");
     }
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement | null;
-    if (target?.closest?.(".touch-ui, .game-panel, button, input, label, a")) return;
+    if (target?.closest?.(".touch-ui, .game-panel, button, input, label, a, .camouflage-bar")) return;
     if (!isTouchLikeEvent(e)) {
       const el = e.currentTarget.querySelector("canvas") as HTMLCanvasElement | null;
       if (el && document.pointerLockElement !== el) {
@@ -269,40 +314,60 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, send }: {
     if (seekerCanTag) doTag();
   };
 
-  const statusText = phase === "hiding" && role === "seeker" ? "Hiding phase: wait for seeking..."
-    : phase === "hiding" && role === "hider" ? "Hide now! Lock/crouch to camouflage and stay still."
-    : phase === "seeking" && role === "seeker" ? "Seek and tag hiders (click/tap Tag when in range)."
-    : phase === "seeking" && role === "hider" ? "Avoid seekers! Blend in, crouch, and lock to hide."
-    : phase === "ended" ? `Winner: ${room.winner_team || "-"}`
-    : "Round lobby";
+  const statusText = phase === "hiding" && role === "seeker" ? "Hunters wait... chameleons are hiding!"
+    : phase === "hiding" && role === "hider" ? "Hide & Blend! Paint, pick a pose, lock to camouflage."
+    : phase === "seeking" && role === "seeker" ? "Hunt & Seek! Find painted chameleons and tag them."
+    : phase === "seeking" && role === "hider" ? "Stay blended! Don't let hunters spot you."
+    : phase === "ended" ? `Round over: ${room.winner_team === "seekers" ? "Hunters" : room.winner_team === "hiders" ? "Chameleons" : room.winner_team || "-"} win!`
+    : "Hunt & Seek Lobby";
 
   const phaseClass = phase === "hiding" ? "hiding" : phase === "seeking" ? "seeking" : phase === "ended" ? "ended" : "";
+  const poseOptions: { id: HiderPose; label: string }[] = [{ id: "stand", label: "Stand" }, { id: "crouch", label: "Box" }, { id: "prone", label: "Flat" }, { id: "tuck", label: "Tall" }];
 
   return (
-    <div className="game-root arena-root" style={{ position: "relative", inset: 0, height: "100%" }} onPointerDown={onPointerDown}>
+    <div className="game-root arena-root huntseek-root" style={{ position: "relative", inset: 0, height: "100%" }} onPointerDown={onPointerDown}>
       <Canvas shadows camera={{ fov: 75, position: [0, 4, 24] }}>
         <ArenaScene room={room} meId={meId} myPlayer={myPlayer} remoteStates={remoteStates} send={send} myPoseRef={myPoseRef} bestTagRef={bestTagRef} onBest={(id) => setCanTagNow(!!id)} />
       </Canvas>
-      <div className="game-overlay">
-        <div className="game-topbar">
+      <div className="game-overlay huntseek-overlay">
+        <div className="game-topbar huntseek-topbar">
           <div className="arena-hud-stats">
-            <strong>Room Arena</strong>
+            <strong className="brand-pill">Meccha Hunt & Seek</strong>
             <span className={`badge ${phase === "seeking" ? "live" : ""}`}>Phase: {phase}{remaining != null ? ` ${remaining}s` : ""}</span>
-            <span className={`badge ${role === "seeker" ? "seeker" : role === "hider" ? "hider" : ""}`}>You: {role}{myPlayer?.alive === false ? " (out)" : ""}</span>
+            <span className={`badge ${role === "seeker" ? "seeker" : role === "hider" ? "hider" : ""}`}>You: {role === "seeker" ? "Hunter" : role === "hider" ? "Chameleon" : role}{myPlayer?.alive === false ? " (caught)" : ""}</span>
           </div>
           <div className="arena-hud-stats">
-            <span className="stat-chip bad">Seekers: {seekers}</span>
-            <span className="stat-chip good">Hiders alive: {hidersAlive}</span>
-            {room.winner_team && <span className="stat-chip warn">Winner: {room.winner_team}</span>}
+            <span className="stat-chip bad">Hunters: {seekers}</span>
+            <span className="stat-chip good">Chameleons: {hidersAlive}</span>
+            {room.winner_team && <span className="stat-chip warn">Winner: {room.winner_team === "seekers" ? "Hunters" : "Chameleons"}</span>}
           </div>
-          <div className={`phase-banner ${phaseClass}`} style={{ padding: "4px 10px", fontWeight: 600 }}>{statusText}</div>
+          <div className={`phase-banner ${phaseClass}`}>{statusText}</div>
         </div>
-        {eventMsg && <div className="game-locked" style={{ top: 58 }}>{eventMsg}</div>}
-        {canTagNow && seekerCanTag && <div className="game-locked pulse-danger" style={{ top: 58, background: "rgba(220,38,38,0.9)" }}>Target in range - tap/click to tag</div>}
+        {eventMsg && <div className="game-locked" style={{ top: 86 }}>{eventMsg}</div>}
+        {canTagNow && seekerCanTag && <div className="game-locked pulse-danger" style={{ top: 86, background: "rgba(220,38,38,0.92)" }}>Target spotted! Tap/click to TAG</div>}
         <div className="game-crosshair">+</div>
-        <div className="game-panel arena-panel">
-          <div className="small muted">Desktop: WASD move, mouse look, Space jump, Shift sprint, C crouch, 1/2/3 camera, L lock/pose, F spectator follow. Mobile: joystick, look pad, action buttons.</div>
-          <div className="small muted">Meccha Chameleon-style tip: as a hider, stop moving, crouch, and press Lock to camouflage and blend with the arena.</div>
+
+        {role === "hider" && myPlayer?.alive !== false && (
+          <div className="camouflage-bar">
+            <div className="camo-title">🎨 Paint & Blend {locked ? "(Locked)" : ""}</div>
+            <div className="palette-row">
+              {PALETTE.map((c) => (
+                <button key={c} className={`swatch ${paintColor === c ? "active" : ""}`} style={{ background: c }} onClick={() => setPaintColor(c)} title={c} />
+              ))}
+              <input className="color-pick" type="color" value={paintColor} onChange={(e) => setPaintColor(e.target.value)} title="Custom paint" />
+            </div>
+            <div className="pose-row">
+              {poseOptions.map((p) => (
+                <button key={p.id} className={`btn secondary pose-btn ${pose === p.id ? "active" : ""}`} onClick={() => setPose(p.id)}>{p.label}</button>
+              ))}
+            </div>
+            <div className="small muted camo-hint">Pick a color to match props, choose a pose/form, then Lock to blend in.</div>
+          </div>
+        )}
+
+        <div className="game-panel arena-panel huntseek-panel">
+          <div className="small muted">Desktop: WASD move, mouse look, Space jump, Shift sprint, C crouch, 1/2/3 camera, L lock/blend, F spectator follow. Mobile: joystick, look pad, buttons.</div>
+          <div className="small muted">Chameleons: paint yourself, pick a pose, stay still and Lock to camouflage. Hunters: spot anything odd and tag it!</div>
         </div>
       </div>
       <VirtualControls showTag={role === "seeker"} canTag={seekerCanTag && canTagNow} onTag={doTag} />

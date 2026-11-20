@@ -6,10 +6,10 @@ export function NavBar() {
   return (
     <header className="nav">
       <div className="nav-inner">
-        <Link to="/" className="brand">BOJU BOJU Arena</Link>
+        <Link to="/" className="brand">BOJU BOJU: Hunt &amp; Seek</Link>
         <nav className="nav-links">
           <NavLink to="/">Home</NavLink>
-          <NavLink to="/play">Play</NavLink>
+          <NavLink to="/play">Practice</NavLink>
           {user ? (
             <>
               <NavLink to="/lobby">Lobby</NavLink>

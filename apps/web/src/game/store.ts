@@ -1,6 +1,7 @@
 ﻿import { create } from "zustand";
 
 export type CameraMode = "first" | "third" | "spectator";
+export type HiderPose = "stand" | "crouch" | "prone" | "tuck";
 
 export type VirtualInput = {
   forward: boolean;
@@ -33,6 +34,10 @@ type GameState = {
   setVirtual: (patch: Partial<VirtualInput>) => void;
   resetVirtual: () => void;
   consumeLookDelta: () => { dx: number; dy: number };
+  paintColor: string;
+  setPaintColor: (c: string) => void;
+  pose: HiderPose;
+  setPose: (p: HiderPose) => void;
 };
 
 const emptyVirtual: VirtualInput = {
@@ -72,4 +77,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (dx !== 0 || dy !== 0) set((s) => ({ virtual: { ...s.virtual, lookDeltaX: 0, lookDeltaY: 0 } }));
     return { dx, dy };
   },
+  paintColor: "#94a3b8",
+  setPaintColor: (paintColor) => set({ paintColor }),
+  pose: "stand",
+  setPose: (pose) => set({ pose }),
 }));

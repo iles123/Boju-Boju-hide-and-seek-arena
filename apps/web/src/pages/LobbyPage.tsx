@@ -8,7 +8,7 @@ export default function LobbyPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [name, setName] = useState("Friends Room");
+  const [name, setName] = useState("Hunt & Seek Squad");
   const [isPublic, setIsPublic] = useState(true);
   const [password, setPassword] = useState("");
   const [joinPassword, setJoinPassword] = useState("");
@@ -74,7 +74,6 @@ export default function LobbyPage() {
     e.preventDefault();
     const raw = joinCode.trim();
     if (!raw) return;
-    // accept full invite URL or plain room code
     let code = raw;
     try {
       const u = new URL(raw);
@@ -99,35 +98,34 @@ export default function LobbyPage() {
 
   return (
     <div className="page">
-      <section className="card stack">
+      <section className="card stack huntseek-card">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <h2>Lobby / Room Browser</h2>
+          <h2>Hunt & Seek Lobby</h2>
           <div className="row">
             <button className="btn secondary" onClick={() => void refresh()} disabled={loading || busy}>Refresh</button>
             <button className="btn" onClick={() => void onQuickMatch()} disabled={busy}>Quick Match</button>
           </div>
         </div>
         {error && <p className="error">{error}</p>}
-        <p className="muted small">Play with friends: create a room and share its code/link, have friends join the same room, choose team preferences in the room lobby, then start and play together against other players online.</p>
+        <p className="muted small"><strong>Play with friends:</strong> create a room, share the invite code/link so your group joins the same room, set preferred roles (Chameleon/Hunter) in the room, then start and play together against other players. Chameleons paint & blend in; Hunters seek & tag.</p>
         <div className="grid-2" style={{ alignItems: "start" }}>
           <div className="stack">
             <form className="card form" onSubmit={onCreate} style={{ margin: 0, maxWidth: "none" }}>
-              <h3>Create Room</h3>
+              <h3>Create Hunt & Seek Room</h3>
               <label>Room name<input value={name} onChange={(e) => setName(e.target.value)} minLength={3} maxLength={50} required /></label>
-              <label className="row"><input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} /> Public room (visible for others to join)</label>
+              <label className="row"><input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} /> Public room (friends + others can join)</label>
               <label>Password (optional)<input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Leave blank for no password" /></label>
               <button className="btn" type="submit" disabled={busy}>Create & Join</button>
-              <p className="muted small">Tip: keep public on to let friends + other people fill teams, or set a password for a private friends lobby.</p>
             </form>
             <form className="card form" onSubmit={onJoinByCode} style={{ margin: 0, maxWidth: "none" }}>
-              <h3>Join by Room Code / Invite Link</h3>
+              <h3>Join by Code / Invite Link</h3>
               <label>Room code or invite link<input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="Paste room code or link" /></label>
               <label>Password (if required)<input value={joinCodePassword} onChange={(e) => setJoinCodePassword(e.target.value)} placeholder="Room password" /></label>
               <button className="btn secondary" type="submit" disabled={busy || !joinCode.trim()}>Join Room</button>
             </form>
           </div>
           <div className="card stack" style={{ margin: 0 }}>
-            <h3>Public Rooms</h3>
+            <h3>Public Matches</h3>
             <label>Join password (for protected rooms)<input value={joinPassword} onChange={(e) => setJoinPassword(e.target.value)} placeholder="Password if required" /></label>
             {loading ? <p className="muted">Loading rooms...</p> : rooms.length === 0 ? <p className="muted">No public rooms yet. Create one or use Quick Match.</p> : (
               <div className="stack">
@@ -144,7 +142,7 @@ export default function LobbyPage() {
             )}
           </div>
         </div>
-        <p className="muted small">Phases 2-4 prototype: rooms/presence, round phases (hiding/seeking), team preferences, networked arena, and mobile/desktop controls.</p>
+        <p className="muted small">Hunt & Seek: hiding/seeking rounds, Chameleon paint & pose camouflage, Hunter tagging, team preferences, networked arena, mobile/desktop controls.</p>
       </section>
     </div>
   );

@@ -5,7 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import { RoomArena } from "../game/RoomArena";
 
 type WsMsg = { type?: string; roomId?: string; payload?: unknown };
-type RemotePlayerState = { user_id?: string; username?: string; team?: string; alive?: boolean; is_spectator?: boolean; x?: number; y?: number; z?: number; yaw?: number; pitch?: number; mode?: string; locked?: boolean };
+type RemotePlayerState = { user_id?: string; username?: string; team?: string; alive?: boolean; is_spectator?: boolean; x?: number; y?: number; z?: number; yaw?: number; pitch?: number; mode?: string; locked?: boolean; paintColor?: string; pose?: string };
 
 export default function RoomPage() {
   const { roomId } = useParams();
@@ -189,7 +189,7 @@ export default function RoomPage() {
           <div>
             <h2>Room {room ? `- ${room.name}` : roomId}</h2>
             <div className="muted small">Status: {status}{room ? ` | Room: ${room.status} | Phase: ${phase}` : ""}</div>
-            <div className="muted small">Room code: <span className="code">{roomId}</span> (share with friends to play together against other players)</div>
+            <div className="muted small">Room code: <span className="code">{roomId}</span> — share with friends to team up in the same room and play Hunt & Seek against others</div>
           </div>
           <div className="row">
             <button className="btn secondary" onClick={() => void copyInvite()}>Copy Invite</button>
@@ -223,21 +223,21 @@ export default function RoomPage() {
               <div><strong>Ready (active):</strong> {room.ready_count}</div>
               <div><strong>Visibility:</strong> {room.is_public ? "Public" : "Private"} {room.has_password ? "(password)" : ""}</div>
               <div><strong>Host:</strong> {room.players.find(p => p.is_host)?.username ?? "-"}</div>
-              <div><strong>Phase:</strong> {phase}{room.winner_team ? ` (winner: ${room.winner_team})` : ""}{room.phase_ends_at ? ` (until ${new Date(room.phase_ends_at).toLocaleTimeString()})` : ""}</div>
-              <div><strong>Your role:</strong> {myPlayer?.team || (myPlayer?.is_spectator ? "spectator" : "-")}{myPlayer && myPlayer.alive === false ? " (out)" : ""}</div>
+              <div><strong>Phase:</strong> {phase}{room.winner_team ? ` (winner: ${room.winner_team === "seekers" ? "Hunters" : room.winner_team === "hiders" ? "Chameleons" : room.winner_team})` : ""}{room.phase_ends_at ? ` (until ${new Date(room.phase_ends_at).toLocaleTimeString()})` : ""}</div>
+              <div><strong>Your role:</strong> {myPlayer?.team === "seeker" ? "Hunter" : myPlayer?.team === "hider" ? "Chameleon" : (myPlayer?.is_spectator ? "spectator" : "-")}{myPlayer && myPlayer.alive === false ? " (caught)" : ""}</div>
             </div>
             <div className="row">
               {myPlayer && !myPlayer.is_spectator && room.status === "lobby" && phase === "lobby" && (
                 <>
                   <button className="btn" onClick={toggleReady}>{myPlayer.is_ready ? "Unready" : "Ready Up"}</button>
-                  <span className="muted small">Preferred team:</span>
+                  <span className="muted small">Preferred role:</span>
                   <button className={`btn secondary ${(!myPlayer.preferred_team || myPlayer.preferred_team === "auto") ? "active" : ""}`} onClick={() => setTeamPref("auto")}>Auto</button>
-                  <button className={`btn secondary ${myPlayer.preferred_team === "hider" ? "active" : ""}`} onClick={() => setTeamPref("hider")}>Hider</button>
-                  <button className={`btn secondary ${myPlayer.preferred_team === "seeker" ? "active" : ""}`} onClick={() => setTeamPref("seeker")}>Seeker</button>
+                  <button className={`btn secondary ${myPlayer.preferred_team === "hider" ? "active" : ""}`} onClick={() => setTeamPref("hider")}>Chameleon</button>
+                  <button className={`btn secondary ${myPlayer.preferred_team === "seeker" ? "active" : ""}`} onClick={() => setTeamPref("seeker")}>Hunter</button>
                 </>
               )}
               {myPlayer?.is_host && room.status === "lobby" && phase === "lobby" && (
-                <button className="btn secondary" onClick={startGame}>Start Game (host)</button>
+                <button className="btn secondary" onClick={startGame}>Start Hunt & Seek (host)</button>
               )}
               {roundActive && !inArena && (
                 <button className="btn" onClick={() => setInArena(true)}>Enter Arena</button>
@@ -245,7 +245,7 @@ export default function RoomPage() {
               {inArena && <button className="btn secondary" onClick={() => setInArena(false)}>Exit Arena View</button>}
               <Link className="btn secondary" to="/play">Greybox Sandbox</Link>
             </div>
-            <p className="muted small">Friends: share the room code/link so your group joins the same room, pick preferred teams to coordinate (balanced automatically), then play together against other players in public matchmaking/rooms. Minimum 4 active players to start a round.</p>
+            <p className="muted small">Friends vs others: share the room code/link so your group joins the same room, pick preferred roles (Chameleon/Hunter) to coordinate (balanced automatically), then play together against other players. Minimum 4 active players to start.</p>
 
             {inArena && (
               <div style={{ height: "min(70vh, 620px)", minHeight: 420, borderRadius: 8, overflow: "hidden", border: "1px solid #334155", position: "relative" }}>
@@ -260,14 +260,14 @@ export default function RoomPage() {
                   <div>
                     <strong>{p.username}</strong>
                     <div className="muted small">
-                      {p.is_host ? "Host" : "Player"} | {p.is_spectator ? "Spectator" : (p.is_ready ? "Ready" : "Not ready")} | {p.connected ? "Online" : "Disconnected"} | team: {p.team || "hider"} | pref: {p.preferred_team || "auto"}{p.alive === false ? " | out" : ""}
+                      {p.is_host ? "Host" : "Player"} | {p.is_spectator ? "Spectator" : (p.is_ready ? "Ready" : "Not ready")} | {p.connected ? "Online" : "Disconnected"} | role: {(p.team === "seeker") ? "Hunter" : (p.team === "hider" ? "Chameleon" : (p.team || "Chameleon"))} | pref: {p.preferred_team === "seeker" ? "Hunter" : p.preferred_team === "hider" ? "Chameleon" : (p.preferred_team || "auto")}{p.alive === false ? " | out" : ""}
                     </div>
                   </div>
                   <div className="muted small">{p.user_id === user?.id ? "You" : ""}</div>
                 </div>
               ))}
             </div>
-            {phase === "lobby" && <p className="muted small">Phase 4 prototype: round phases, team assignment (with preferences), networked arena sync, seeker tagging, and Meccha Chameleon-inspired movement/camouflage feel.</p>}
+            {phase === "lobby" && <p className="muted small">Hunt & Seek: hiding/seeking phases, Chameleons paint & pose to blend in and Hunters tag them. Use preferred roles to team up with friends against others.</p>}
           </>
         )}
       </section>
