@@ -1,4 +1,5 @@
 ﻿import { useEffect, useState } from "react";
+import { useGameStore } from "./store";
 
 export type InputState = {
   forward: boolean;
@@ -29,6 +30,7 @@ function isTypingTarget(target: EventTarget | null) {
 
 export function useKeyboardInput() {
   const [keys, setKeys] = useState<InputState>(initial);
+  const virtual = useGameStore((s) => s.virtual);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent, down: boolean) => {
@@ -62,5 +64,13 @@ export function useKeyboardInput() {
     };
   }, []);
 
-  return keys;
+  return {
+    forward: keys.forward || virtual.forward,
+    backward: keys.backward || virtual.backward,
+    left: keys.left || virtual.left,
+    right: keys.right || virtual.right,
+    jump: keys.jump || virtual.jump,
+    sprint: keys.sprint || virtual.sprint,
+    crouch: keys.crouch || virtual.crouch,
+  };
 }

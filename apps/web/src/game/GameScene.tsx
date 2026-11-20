@@ -6,6 +6,7 @@ import { PlayerRig } from "./components/PlayerRig";
 import { SpectatorRig } from "./components/SpectatorRig";
 import { MouseLook } from "./MouseLook";
 import { GameHUD } from "./GameHUD";
+import { VirtualControls } from "./VirtualControls";
 import { useGameStore } from "./store";
 
 function SceneContents() {
@@ -22,23 +23,29 @@ function SceneContents() {
       </Physics>
       <MouseLook yawRef={yawRef} pitchRef={pitchRef} active={true} />
       {mode === "spectator" && <SpectatorRig yawRef={yawRef} pitchRef={pitchRef} />}
-      {/* simple sky/ground color */}
       <color attach="background" args={["#dbeafe"]} />
       <fog attach="fog" args={["#dbeafe", 30, 120]} />
     </>
   );
 }
 
+function isTouchLikeEvent(e: unknown) {
+  const pe = e as { pointerType?: string };
+  return pe?.pointerType === "touch" || (typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0));
+}
+
 export function GameScene() {
   return (
     <div className="game-root">
       <Canvas shadows camera={{ fov: 75, position: [0, 4, 24] }} onPointerDown={(e) => {
+        if (isTouchLikeEvent(e)) return;
         const el = e.target as HTMLElement;
         if (el?.requestPointerLock && document.pointerLockElement !== el) el.requestPointerLock();
       }}>
         <SceneContents />
       </Canvas>
       <GameHUD />
+      <VirtualControls />
     </div>
   );
 }

@@ -20,7 +20,8 @@ export function GameHUD() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
       if (e.code === "Digit1") setCameraMode("first");
       if (e.code === "Digit2") setCameraMode("third");
       if (e.code === "Digit3") setCameraMode("spectator");
@@ -35,19 +36,19 @@ export function GameHUD() {
     <div className="game-overlay">
       <div className="game-topbar">
         <div><strong>Greybox Sandbox</strong></div>
-        <div>Mode: {cameraMode} {locked && cameraMode === "third" ? "· LOCKED" : ""}</div>
-        <div>{pointerLocked ? "Mouse locked (Esc to unlock)" : "Click scene to lock mouse"}</div>
+        <div>Mode: {cameraMode} {locked && cameraMode === "third" ? "- LOCKED" : ""}</div>
+        <div>{pointerLocked ? "Mouse locked (Esc to unlock)" : "Desktop: click to lock mouse | Mobile: use on-screen controls"}</div>
       </div>
       <div className="game-crosshair">+</div>
       {locked && cameraMode === "third" && <div className="game-locked">LOCKED AS PROP (camera free)</div>}
       <div className="game-panel">
         <div className="row">
-          <button className={`btn secondary ${cameraMode==="first"?"active":""}`} onClick={() => setCameraMode("first")}>1P</button>
-          <button className={`btn secondary ${cameraMode==="third"?"active":""}`} onClick={() => setCameraMode("third")}>3P</button>
-          <button className={`btn secondary ${cameraMode==="spectator"?"active":""}`} onClick={() => setCameraMode("spectator")}>Spectator</button>
+          <button className={`btn secondary ${cameraMode === "first" ? "active" : ""}`} onClick={() => setCameraMode("first")}>1P</button>
+          <button className={`btn secondary ${cameraMode === "third" ? "active" : ""}`} onClick={() => setCameraMode("third")}>3P</button>
+          <button className={`btn secondary ${cameraMode === "spectator" ? "active" : ""}`} onClick={() => setCameraMode("spectator")}>Spectator</button>
           <button className="btn secondary" onClick={() => setLocked(!locked)}>Toggle Lock (L)</button>
         </div>
-        <div className="small muted">WASD move · Mouse look · Space jump · Shift sprint · C crouch · 1/2/3 camera · L lock prop · F spectator follow</div>
+        <div className="small muted">Desktop: WASD move, mouse look, Space jump, Shift sprint, C crouch, 1/2/3 camera, L lock prop, F spectator follow. Mobile: joystick + look pad + buttons.</div>
         <label className="small">Sensitivity {sensitivity.toFixed(3)}<input type="range" min={0.0005} max={0.006} step={0.0001} value={sensitivity} onChange={(e) => setSensitivity(parseFloat(e.target.value))} /></label>
         <label className="small">FOV {fov}<input type="range" min={60} max={100} step={1} value={fov} onChange={(e) => setFov(parseInt(e.target.value, 10))} /></label>
         <label className="small row"><input type="checkbox" checked={invertY} onChange={(e) => setInvertY(e.target.checked)} /> Invert Y</label>
@@ -56,4 +57,3 @@ export function GameHUD() {
     </div>
   );
 }
-

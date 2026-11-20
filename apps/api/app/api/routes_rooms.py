@@ -108,6 +108,12 @@ async def room_ws(websocket: WebSocket, room_id: str, ticket: str):
                 except ValueError as e:
                     await websocket.send_json({"type": "error", "payload": {"message": str(e)}})
                 await room_manager.broadcast_room_state(room_id)
+            elif mtype == "room.team_pref":
+                team = str(payload.get("team", "auto"))
+                try:
+                    await room_manager.set_team_preference(room_id, user.id, team)
+                except ValueError as e:
+                    await websocket.send_json({"type": "error", "payload": {"message": str(e)}})
             elif mtype == "room.leave":
                 await room_manager.leave_room(room_id, user.id, disconnected=False)
                 await room_manager.broadcast_room_state(room_id)

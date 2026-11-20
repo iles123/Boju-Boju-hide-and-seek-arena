@@ -42,6 +42,7 @@ export type RoomPlayer = {
   connected: boolean;
   is_spectator: boolean;
   team?: "seeker" | "hider" | "spectator";
+  preferred_team?: "auto" | "seeker" | "hider";
   alive?: boolean;
 };
 

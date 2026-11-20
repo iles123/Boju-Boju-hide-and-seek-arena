@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 RoundPhase = Literal["lobby", "hiding", "seeking", "ended"]
 RoomStatus = Literal["lobby", "starting", "in_progress"]
+TeamPref = Literal["auto", "seeker", "hider"]
 
 
 class RoomCreateRequest(BaseModel):
@@ -28,6 +29,7 @@ class RoomPlayerOut(BaseModel):
     connected: bool
     is_spectator: bool
     team: Literal["seeker", "hider", "spectator"] = "hider"
+    preferred_team: TeamPref = "auto"
     alive: bool = True
 
 

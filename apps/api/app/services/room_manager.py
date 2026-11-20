@@ -35,6 +35,7 @@ class RoomPlayer:
     joined_at: datetime = field(default_factory=utcnow)
     disconnect_task: asyncio.Task | None = None
     team: str = "hider"  # seeker | hider | spectator
+    preferred_team: str = "auto"  # auto | seeker | hider (lobby preference for team balancing)
     alive: bool = True
 
 
@@ -293,6 +294,27 @@ class RoomManager:
                     return self._room_detail(room)
         return detail
 
+
+    async def set_team_preference(self, room_id: str, user_id: str, team: str) -> dict[str, Any]:
+        if team not in ("auto", "seeker", "hider"):
+            raise ValueError("Invalid team preference")
+        async with self.global_lock:
+            room = self.rooms.get(room_id)
+        if not room:
+            raise ValueError("Room not found")
+        async with room.lock:
+            player = room.players.get(user_id)
+            if not player:
+                raise ValueError("Not in room")
+            if player.is_spectator:
+                raise ValueError("Spectators cannot choose a team")
+            if room.status != "lobby":
+                raise ValueError("Cannot change team preference now")
+            player.preferred_team = team
+            detail = self._room_detail(room)
+        await self.broadcast_room_state(room_id)
+        return detail
+
     def _can_autostart(self, room: Room) -> bool:
         active = [p for p in room.players.values() if not p.is_spectator and p.connected]
         if len(active) < 4:
@@ -316,11 +338,27 @@ class RoomManager:
                 raise ValueError("Need at least 4 connected players to start")
             if autostart and not all(p.is_ready for p in active):
                 raise ValueError("All active players must be ready")
-            # assign teams
-            shuffled = list(active)
-            random.shuffle(shuffled)
+            # assign teams (respect lobby preferences when possible, keep balance)
             seekers_count = 1 if len(active) < 8 else 2
-            seeker_ids = {p.user_id for p in shuffled[:seekers_count]}
+            seekers: list[RoomPlayer] = []
+            pref_seekers = [p for p in active if getattr(p, "preferred_team", "auto") == "seeker"]
+            random.shuffle(pref_seekers)
+            seekers.extend(pref_seekers[:seekers_count])
+            if len(seekers) < seekers_count:
+                remaining_seek = [p for p in active if p not in seekers and getattr(p, "preferred_team", "auto") != "hider"]
+                random.shuffle(remaining_seek)
+                for p in remaining_seek:
+                    if len(seekers) >= seekers_count:
+                        break
+                    seekers.append(p)
+            if len(seekers) < seekers_count:
+                remaining_any = [p for p in active if p not in seekers]
+                random.shuffle(remaining_any)
+                for p in remaining_any:
+                    if len(seekers) >= seekers_count:
+                        break
+                    seekers.append(p)
+            seeker_ids = {p.user_id for p in seekers}
             for p in room.players.values():
                 p.is_ready = False
                 p.alive = True
@@ -619,6 +657,7 @@ class RoomManager:
                 "connected": p.connected,
                 "is_spectator": p.is_spectator,
                 "team": p.team,
+                "preferred_team": getattr(p, "preferred_team", "auto"),
                 "alive": p.alive,
             }
             for p in sorted(room.players.values(), key=lambda x: (not x.is_host, x.joined_at))

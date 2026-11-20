@@ -1,94 +1,121 @@
-﻿# BOJU BOJU Arena
+﻿# Boju Boju Arena
 
-3D multiplayer hide-and-seek arena prototype (React + Three.js + FastAPI).
+3D multiplayer hide-and-seek arena prototype (web). Phases 0-4 are implemented as a playable prototype: auth scaffolding, rooms/lobby/presence, greybox movement sandbox, round/phase flow, and a networked in-memory arena with basic seeker/hider gameplay.
 
-## Repo layout
+## Stack
+- Frontend: React + Vite + TypeScript + Three.js / React Three Fiber / Rapier / Zustand (`apps/web`)
+- Backend: FastAPI + SQLAlchemy (async) + WebSockets (`apps/api`)
+- Shared protocol/types: `packages/shared/*`
+- Optional infra: Docker Compose for Postgres/Redis (`docker-compose.yml`)
 
-- `apps/web` - React + Vite + TypeScript client (Three.js / R3F / Rapier / Zustand)
-- `apps/api` - FastAPI backend (auth, rooms/lobby, WebSocket, round manager)
-- `packages/shared/ts` - shared TypeScript protocol/types/constants
-- `packages/shared/py` - shared Python package scaffold
-- `infra` - infrastructure notes/scaffold
-- `.github/workflows` - CI (web build/lint, api lint/tests, docker compose config)
-- `docker-compose.yml` - local dev stack (web, api, postgres, redis)
+## Features (current prototype)
+- Auth/lobby/rooms with quick match, create/join, invite by room code/link, and password-protected rooms
+- Friends can join the same room and coordinate with preferred team selection, while public rooms/matchmaking allow playing against other players
+- Round flow in `apps/api/app/services/room_manager.py`: `lobby -> hiding (45s) -> seeking (300s) -> ended (10s) -> lobby`
+- Team assignment (seekers/hiders), elimination to spectator, basic win conditions, and phase timers
+- Networked arena prototype over room WebSocket: player state sync, remote players, seeker tagging, phase/round events
+- Meccha Chameleon-inspired hide-and-seek feel: smooth WASD + mouse movement, jump/crouch, lock/pose to camouflage as a hider, 1P/3P/spectator camera modes
+- Procedural character animation and game-friendly HUD/UI
+- Virtual/mobile controls (on-screen joystick, look pad, jump/sprint/crouch/lock/camera/tag buttons) for touch devices and smaller screens
+- **No-Docker local run**: API defaults to SQLite and in-memory rate limiting fallback when Redis is unavailable
 
-## Local run (no Docker, easiest)
+## Local development (no Docker)
+Prereqs: Node.js 18+, Python 3.11+.
 
-### API
-
-```bash
+### 1) API
+```powershell
 cd apps/api
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+# optional: copy .env.example to .env (defaults already work for local no-Docker)
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
+- Health: `GET http://localhost:8000/health` -> `{"status":"ok","phase":"4"}`
+- Default DB: SQLite file `boju_dev.db` in `apps/api` (`DATABASE_URL=sqlite+aiosqlite:///./boju_dev.db`)
+- Redis optional: if `REDIS_URL` is not reachable, API falls back to in-memory rate limiting (suitable for local dev)
 
-Uses SQLite by default (`boju_dev.db`) and in-memory fallback when Redis is unavailable. Check: `GET http://localhost:8000/health`
-
-### Web
-
-```bash
+### 2) Web
+```powershell
 cd apps/web
 npm install
-copy .env.example .env
+# optional: copy .env.example to .env and set VITE_API_BASE_URL (defaults to http://localhost:8000)
 npm run dev
 ```
+Open the Vite URL (usually `http://localhost:5173`). Register/sign in, create/join a room (or share room code/link with friends), ready up, start round, and play.
 
-Open: http://localhost:5173
+## How to play
+- **Desktop:** WASD move, mouse look, Space jump, Shift sprint, C crouch, 1/2/3 camera (1P/3P/spectator), L lock/pose (camouflage prop form for hiders), F spectator follow in sandbox/spectator modes, click near hiders as seeker during seeking phase to tag.
+- **Mobile/touch:** on-screen joystick to move, drag look area to look, and action buttons for Jump/Sprint/Crouch/Lock/Cam/Tag.
+- **With friends vs others:** one player creates a public room and shares the room code/invite link; friends join the same room and set preferred team (auto/hider/seeker) to coordinate; additional players can join from lobby/quick match to fill the match. Minimum 4 active players required to start a round.
 
-## Local run (Docker Compose, optional)
-
-1. Copy env files:
-   - `copy apps\api\.env.example apps\api\.env`
-   - `copy apps\web\.env.example apps\web\.env`
-2. Set `DATABASE_URL`/`REDIS_URL` for Postgres/Redis services if needed, then start:
-   - `docker compose up --build`
-3. Open web: `http://localhost:5173` (API: `http://localhost:8000`)
-
-## Tests / lint
-
-API (from `apps/api`):
-```bash
-ruff check .
-pytest -q
-```
-
-Web (from `apps/web`):
-```bash
+## Build / lint / test
+Web:
+```powershell
+cd apps/web
 npm run lint
 npm run build
 ```
+API:
+```powershell
+cd apps/api
+python -m ruff check .
+python -m pytest -q
+```
 
-## Implemented phases
+## Docker (optional)
+`docker-compose.yml` provides Postgres/Redis/API/Web for local containerized runs if Docker is installed:
+```powershell
+docker compose up --build
+```
+This is optional; the app is designed to run locally without Docker.
 
-- **Phase 0**: monorepo scaffold, Docker Compose (api/postgres/redis/web), CI, shared protocol/constants/noise stubs, `GET /health`.
-- **Phase 1**: auth (register/login/refresh/logout/forgot/reset/verify), `/auth/me`, `/auth/ws-ticket`, argon2 + JWT access/rotating refresh cookie + DB token hashes, rate limiting/lockout basics, user/profile/stats/roles, reports/admin basics, web auth pages/profile.
-- **Phase 2**: lobby/room REST (`GET/POST /rooms`, `/rooms/{id}/join|leave`, `/rooms/quick-match`) + WebSocket presence (`/ws/rooms/{id}?ticket=...`), 20-player capacity, ready system, host start/auto-start, host migration, 30s reconnect grace, room browser UI.
-- **Phase 3**: greybox 3D map + first/third-person movement + spectator camera + client-side physics (single-player sandbox), `/play` page (Three.js/R3F/Rapier/Zustand).
-- **Phase 4 (prototype)**: server-authoritative room round flow (hiding -> seeking -> ended -> lobby), team assignment (seekers/hiders), round timers/win conditions, WebSocket gameplay messages (`player.state` sync, `player.tag`, `player.eliminated`, snapshots/phase events), and in-room 3D arena view with networked player proxies, seeker tagging, elimination-to-spectator, and phase/role HUD.
+## Deploying to Render (recommended approach)
+This repo is a monorepo with separate web and API services. A practical Render setup is **one Web Service for API + one Static Site for web** (and a managed Postgres for persistence).
 
-## How to test
+### 1) Database (where it is / what to use)
+- **Local (no Docker):** SQLite database file at `apps/api/boju_dev.db` (created automatically). Good for local/dev only.
+- **Production (Render):** create a **Render PostgreSQL** instance. Render provides an internal/external connection string. Use the **Internal Database URL** for the API service running on Render.
+  - Set API env `DATABASE_URL` to the Render Postgres URL but with async driver, e.g. `postgresql+asyncpg://USER:PASSWORD@HOST:PORT/DBNAME`.
+  - SQLite files on Render web services are not durable across deploys/restarts; use Postgres for hosted environments.
 
-### Phase 2 (lobby/rooms)
-1. Start API + web (and Postgres/Redis via compose or local env).
-2. Sign in in the web app.
-3. Open **Lobby**: create room, quick match, list/join rooms.
-4. In a room: observe live WebSocket state, ready/unready, host start, multiple sessions, leave/rejoin, disconnect grace/host migration (in-memory; API restart resets rooms).
+### 2) API service on Render (Web Service)
+- Create a **Web Service** from this repo.
+- Root directory: `apps/api`
+- Build command:
+  ```bash
+  pip install -r requirements.txt
+  ```
+- Start command:
+  ```bash
+  uvicorn app.main:app --host 0.0.0.0 --port $PORT
+  ```
+- Environment variables (minimum): 
+  - `DATABASE_URL=postgresql+asyncpg://...` (Render Postgres internal URL, asyncpg form)
+  - `JWT_SECRET=<strong-random-secret>`
+  - `CORS_ORIGINS=https://<your-web-static-site>.onrender.com` (comma-separated if multiple)
+  - `APP_ENV=production`
+  - `REDIS_URL` optional (if you provision Redis); if omitted/unavailable, app falls back to in-memory rate limiting (fine for single-instance prototype, not distributed)
+- Notes: room/gameplay state is currently **in-memory** (prototype). For multi-instance scaling/persistence you would need shared state (Redis/DB) and authoritative server extensions (not yet implemented). For a demo/prototype, run a single API instance.
 
-### Phase 3 (greybox sandbox)
-1. `cd apps/web && npm install && npm run dev` (or build/preview).
-2. Open http://localhost:5173/play.
-3. Click scene to pointer-lock mouse. Controls: **WASD** move, **mouse** look, **Space** jump, **Shift** sprint, **C** crouch, **1/2/3** first/third/spectator, **L** lock prop, **F** spectator follow, **Esc** unlock.
+### 3) Web service on Render (Static Site)
+- Create a **Static Site** from this repo.
+- Root directory: `apps/web`
+- Build command:
+  ```bash
+  npm install && npm run build
+  ```
+- Publish directory: `dist`
+- Environment variable:
+  - `VITE_API_BASE_URL=https://<your-api-service>.onrender.com`
+- Because this is an SPA, add a rewrite rule in Render Static Site settings: `/* -> /index.html` (so routes like `/rooms/:id` work on refresh).
 
-### Phase 4 (room rounds / networked arena)
-1. Start API + web and sign in with 4+ accounts/sessions (or enough connected players).
-2. Create/join the same room; ready up and start (or auto-start when all ready).
-3. When round begins, click **Enter Arena** in the room page (auto-enters on phase change).
-4. Hiding phase: hiders move/hide (use **L** to lock as prop). Seekers are held until seeking.
-5. Seeking phase: seekers chase and click near hiders to tag; tagged hiders are eliminated and spectate. Round ends when hiders are eliminated (seekers win) or timer expires (hiders win), then returns to lobby.
+### 4) After deploy checklist
+- Open API `/health` and confirm `{"status":"ok","phase":"4"}`
+- Confirm web can register/login and create/join rooms
+- Test invite link/room code flow between two browsers/devices
+- If using cookies/auth across domains, ensure CORS origins and credentials settings match your deployed URLs
 
-## Notes
-
-- Room/game/round state is in-memory (Redis-backed scaling hooks can be added later).
-- Phase 4 is a playable prototype: client relays movement state and tagging intents over room WebSocket while server manages phases/teams/elimination/win conditions. Further hardening can add authoritative movement validation, prop system, voice/noise mechanics, anti-cheat, persistence, and deployment polish.
-- No-Docker local run is supported (SQLite + in-memory rate-limit fallback). Redis/Postgres/Docker are optional and not required for basic local functionality.
+## Notes / limitations
+- Prototype phase: server manages phases/teams/elimination but client relays movement; full authoritative movement validation, anti-cheat, persistence of full match history, and horizontal scaling are future work.
+- Audio/BGM is user-provided (not bundled).

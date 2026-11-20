@@ -2,6 +2,18 @@
 
 export type CameraMode = "first" | "third" | "spectator";
 
+export type VirtualInput = {
+  forward: boolean;
+  backward: boolean;
+  left: boolean;
+  right: boolean;
+  jump: boolean;
+  sprint: boolean;
+  crouch: boolean;
+  lookDeltaX: number;
+  lookDeltaY: number;
+};
+
 type GameState = {
   cameraMode: CameraMode;
   setCameraMode: (m: CameraMode) => void;
@@ -17,9 +29,25 @@ type GameState = {
   setInvertY: (v: boolean) => void;
   headBob: boolean;
   setHeadBob: (v: boolean) => void;
+  virtual: VirtualInput;
+  setVirtual: (patch: Partial<VirtualInput>) => void;
+  resetVirtual: () => void;
+  consumeLookDelta: () => { dx: number; dy: number };
 };
 
-export const useGameStore = create<GameState>((set) => ({
+const emptyVirtual: VirtualInput = {
+  forward: false,
+  backward: false,
+  left: false,
+  right: false,
+  jump: false,
+  sprint: false,
+  crouch: false,
+  lookDeltaX: 0,
+  lookDeltaY: 0,
+};
+
+export const useGameStore = create<GameState>((set, get) => ({
   cameraMode: "first",
   setCameraMode: (cameraMode) => set({ cameraMode }),
   locked: false,
@@ -34,4 +62,14 @@ export const useGameStore = create<GameState>((set) => ({
   setInvertY: (invertY) => set({ invertY }),
   headBob: true,
   setHeadBob: (headBob) => set({ headBob }),
+  virtual: { ...emptyVirtual },
+  setVirtual: (patch) => set((s) => ({ virtual: { ...s.virtual, ...patch } })),
+  resetVirtual: () => set({ virtual: { ...emptyVirtual } }),
+  consumeLookDelta: () => {
+    const v = get().virtual;
+    const dx = v.lookDeltaX;
+    const dy = v.lookDeltaY;
+    if (dx !== 0 || dy !== 0) set((s) => ({ virtual: { ...s.virtual, lookDeltaX: 0, lookDeltaY: 0 } }));
+    return { dx, dy };
+  },
 }));
