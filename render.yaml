@@ -1,13 +1,13 @@
 services:
   - type: keyvalue
-    name: boju-boju-redis
+    name: boju-boju-arena-redis
     region: oregon
     plan: free
     ipAllowList: []
     maxmemoryPolicy: allkeys-lru
 
   - type: web
-    name: boju-boju-api
+    name: boju-boju-arena-api
     runtime: python
     pythonVersion: "3.12"
     region: oregon
@@ -22,11 +22,11 @@ services:
         value: production
       - key: DATABASE_URL
         fromDatabase:
-          name: boju-boju-db
+          name: boju-boju-arena-db
           property: connectionString
       - key: REDIS_URL
         fromService:
-          name: boju-boju-redis
+          name: boju-boju-arena-redis
           type: keyvalue
           property: connectionString
       - key: JWT_SECRET
@@ -36,7 +36,7 @@ services:
       - key: WEB_BASE_URL
         value: https://boju-boju-web.onrender.com
       - key: API_BASE_URL
-        value: https://boju-boju-api.onrender.com
+        value: https://boju-boju-arena-api.onrender.com
       - key: REFRESH_COOKIE_SECURE
         value: "true"
       - key: REFRESH_COOKIE_SAMESITE
@@ -61,10 +61,10 @@ services:
         value: nosniff
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://boju-boju-api.onrender.com
+        value: https://boju-boju-arena-api.onrender.com
 
 databases:
-  - name: boju-boju-db
+  - name: boju-boju-arena-db
     region: oregon
     plan: free
     databaseName: bojuboju
