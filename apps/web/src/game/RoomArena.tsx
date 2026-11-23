@@ -421,8 +421,11 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, remotePaintTextu
   const [eventMsg, setEventMsg] = useState<string | null>(null);
   const [canTagNow, setCanTagNow] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const [camoOpen, setCamoOpen] = useState(false);
-  const [hudOpen, setHudOpen] = useState(false);
+  const activeSheet = useGameStore((s) => s.activeSheet);
+  const toggleSheet = useGameStore((s) => s.toggleSheet);
+  const setActiveSheet = useGameStore((s) => s.setActiveSheet);
+  const camoOpen = activeSheet === "camo";
+  const hudOpen = activeSheet === "hud";
 
   const paintColor = useGameStore((s) => s.paintColor);
   const setPaintColor = useGameStore((s) => s.setPaintColor);
@@ -442,6 +445,8 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, remotePaintTextu
   const paintOpen = useGameStore((s) => s.paintOpen);
   const setPaintOpen = useGameStore((s) => s.setPaintOpen);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
+  useEffect(() => () => useGameStore.getState().setActiveSheet(null), []);
+  useEffect(() => { if (paintOpen) setActiveSheet(null); }, [paintOpen, setActiveSheet]);
 
   useEffect(() => {
     if (!eventMsg) return;
@@ -451,6 +456,7 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, remotePaintTextu
 
   const phase = room.phase || "lobby";
   const role = myPlayer?.team || "hider";
+  useEffect(() => { setActiveSheet(null); }, [phase, role, setActiveSheet]);
   const seekerCanTag = role === "seeker" && phase === "seeking" && myPlayer?.alive !== false;
   const ends = room.phase_ends_at ? new Date(room.phase_ends_at).getTime() : null;
   const remaining = ends ? Math.max(0, Math.ceil((ends - now) / 1000)) : null;
@@ -510,11 +516,13 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, remotePaintTextu
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement | null;
     if (target?.closest?.(".touch-ui, .game-panel, button, input, label, a, .camouflage-bar")) return;
-    if (!isTouchLikeEvent(e)) {
-      const el = e.currentTarget.querySelector("canvas") as HTMLCanvasElement | null;
-      if (el && document.pointerLockElement !== el) {
-        try { el.requestPointerLock(); } catch { /* ignore */ }
-      }
+    if (isTouchLikeEvent(e)) {
+      setActiveSheet(null);
+      return;
+    }
+    const el = e.currentTarget.querySelector("canvas") as HTMLCanvasElement | null;
+    if (el && document.pointerLockElement !== el) {
+      try { el.requestPointerLock(); } catch { /* ignore */ }
     }
   };
 
@@ -548,8 +556,8 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, remotePaintTextu
         <ArenaScene room={room} meId={meId} myPlayer={myPlayer} remoteStates={remoteStates} remotePaintTextures={remotePaintTextures} decoys={decoys} shimmerIds={shimmerIds} shots={shots} send={send} myPoseRef={myPoseRef} bestTagRef={bestTagRef} onBest={(id) => setCanTagNow(!!id)} />
       </Canvas>
       <div className="game-overlay huntseek-overlay">
-        <button className="mobile-sheet-toggle hud-toggle" onPointerDown={() => setHudOpen((v) => !v)}>{hudOpen ? "Close" : "HUD"}</button>
-        {role === "hider" && myPlayer?.alive !== false && <button className="mobile-sheet-toggle camo-toggle" onPointerDown={() => setCamoOpen((v) => !v)}>{camoOpen ? "Close" : "Blend"}</button>}
+        <button className={`mobile-sheet-toggle hud-toggle ${hudOpen ? "active" : ""}`} aria-expanded={hudOpen} onPointerDown={() => toggleSheet("hud")}>{hudOpen ? "Close" : "HUD"}</button>
+        {role === "hider" && myPlayer?.alive !== false && <button className={`mobile-sheet-toggle camo-toggle ${camoOpen ? "active" : ""}`} aria-expanded={camoOpen} onPointerDown={() => toggleSheet("camo")}>{camoOpen ? "Close" : "Blend"}</button>}
         <div className={`game-topbar huntseek-topbar ${hudOpen ? "mobile-open" : ""}`}>
 
           <div className="arena-hud-stats">

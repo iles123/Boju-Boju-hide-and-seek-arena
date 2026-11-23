@@ -1,5 +1,6 @@
 ﻿import { Link, NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { MusicToggle } from "./MusicToggle";
 
 export function NavBar() {
   const { user, logout } = useAuth();
@@ -8,6 +9,7 @@ export function NavBar() {
       <div className="nav-inner">
         <Link to="/" className="brand">BOJU BOJU: Hunt &amp; Seek</Link>
         <nav className="nav-links">
+          <MusicToggle />
           <NavLink to="/">Home</NavLink>
           <NavLink to="/play">Practice</NavLink>
           {user ? (

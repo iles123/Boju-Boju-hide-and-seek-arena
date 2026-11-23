@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect } from "react";
 import { useGameStore, type HiderPose } from "./store";
 import { POSES } from "./paint";
 
@@ -25,7 +25,9 @@ export function GameHUD() {
     setPose,
     setPaintOpen,
   } = useGameStore();
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const activeSheet = useGameStore((s) => s.activeSheet);
+  const toggleSheet = useGameStore((s) => s.toggleSheet);
+  const toolsOpen = activeSheet === "tools";
 
   useEffect(() => {
 
@@ -39,6 +41,7 @@ export function GameHUD() {
       if (e.code === "KeyF") setPaintOpen(!useGameStore.getState().paintOpen);
       if (e.code === "Escape") {
         if (useGameStore.getState().paintOpen) setPaintOpen(false);
+        else if (useGameStore.getState().activeSheet) useGameStore.getState().setActiveSheet(null);
         else document.exitPointerLock?.();
       }
     };
@@ -57,7 +60,7 @@ export function GameHUD() {
       </div>
       <div className="game-crosshair">+</div>
       {locked && <div className="game-locked">BLENDED / CAMOUFLAGED</div>}
-      <button className="mobile-sheet-toggle tools-toggle" onPointerDown={() => setToolsOpen((v) => !v)}>{toolsOpen ? "Close" : "Tools"}</button>
+      <button className={`mobile-sheet-toggle tools-toggle ${toolsOpen ? "active" : ""}`} aria-expanded={toolsOpen} onPointerDown={() => toggleSheet("tools")}>{toolsOpen ? "Close" : "Tools"}</button>
       <div className={`game-panel ${toolsOpen ? "mobile-open" : ""}`}>
 
         <div className="row">

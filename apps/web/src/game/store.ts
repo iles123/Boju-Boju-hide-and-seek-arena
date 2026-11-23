@@ -3,6 +3,7 @@ import type { HiderSize, PoseId } from "./paint";
 
 export type CameraMode = "first" | "third" | "spectator";
 export type HiderPose = PoseId;
+export type SheetId = "map" | "tools" | "hud" | "camo";
 
 export type VirtualInput = {
   forward: boolean;
@@ -44,6 +45,9 @@ type GameState = {
   setHiderSize: (s: HiderSize) => void;
   paintOpen: boolean;
   setPaintOpen: (v: boolean) => void;
+  activeSheet: SheetId | null;
+  setActiveSheet: (sheet: SheetId | null) => void;
+  toggleSheet: (sheet: SheetId) => void;
   paintTextureDataUrl: string | null;
   setPaintTextureDataUrl: (v: string | null) => void;
   paintCompleteness: number;
@@ -109,6 +113,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   setHiderSize: (hiderSize) => set({ hiderSize }),
   paintOpen: false,
   setPaintOpen: (paintOpen) => set({ paintOpen }),
+  activeSheet: null,
+  setActiveSheet: (activeSheet) => set({ activeSheet }),
+  toggleSheet: (sheet) => set((s) => ({ activeSheet: s.activeSheet === sheet ? null : sheet })),
   paintTextureDataUrl: null,
   setPaintTextureDataUrl: (paintTextureDataUrl) => set({ paintTextureDataUrl }),
   paintCompleteness: 0,

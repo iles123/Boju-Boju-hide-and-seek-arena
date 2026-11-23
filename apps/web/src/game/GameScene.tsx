@@ -1,4 +1,4 @@
-﻿import { useMemo, useRef, useState } from "react";
+﻿import { useMemo, useRef } from "react";
 
 import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
@@ -44,18 +44,24 @@ export function GameScene() {
   const setSandbox = useGameStore((s) => s.setSandboxMapId);
   const paintOpen = useGameStore((s) => s.paintOpen);
   const setPaintOpen = useGameStore((s) => s.setPaintOpen);
-  const [mapsOpen, setMapsOpen] = useState(false);
+  const activeSheet = useGameStore((s) => s.activeSheet);
+  const toggleSheet = useGameStore((s) => s.toggleSheet);
+  const setActiveSheet = useGameStore((s) => s.setActiveSheet);
+  const mapsOpen = activeSheet === "map";
   return (
     <div className="game-root">
-      <button className="mobile-sheet-toggle map-toggle" onPointerDown={() => setMapsOpen((v) => !v)}>{mapsOpen ? "Close" : "Maps"}</button>
+      <button className={`mobile-sheet-toggle map-toggle ${mapsOpen ? "active" : ""}`} aria-expanded={mapsOpen} onPointerDown={() => toggleSheet("map")}>{mapsOpen ? "Close" : "Maps"}</button>
       <div className={`practice-map-picker ${mapsOpen ? "mobile-open" : ""}`}>
         {MAPS.map((m) => (
-          <button key={m.id} className={`btn secondary ${mapId === m.id ? "active" : ""}`} onClick={() => { setSandbox(m.id); setMapsOpen(false); }}>{m.name}</button>
+          <button key={m.id} className={`btn secondary ${mapId === m.id ? "active" : ""}`} onClick={() => { setSandbox(m.id); setActiveSheet(null); }}>{m.name}</button>
         ))}
       </div>
 
       <Canvas shadows camera={{ fov: 75, position: [0, 4, 24] }} onPointerDown={(e) => {
-        if (isTouchLikeEvent(e)) return;
+        if (isTouchLikeEvent(e)) {
+          setActiveSheet(null);
+          return;
+        }
         const el = e.target as HTMLElement;
         if (el?.requestPointerLock && document.pointerLockElement !== el) el.requestPointerLock();
       }}>

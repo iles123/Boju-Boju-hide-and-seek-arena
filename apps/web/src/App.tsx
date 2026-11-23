@@ -1,5 +1,4 @@
 ﻿import { Route, Routes } from "react-router-dom";
-import { MusicToggle } from "./components/MusicToggle";
 import { NavBar } from "./components/NavBar";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import LandingPage from "./pages/LandingPage";
@@ -50,7 +49,6 @@ function App() {
           }
         />
       </Routes>
-      <MusicToggle />
     </>
   );
 }

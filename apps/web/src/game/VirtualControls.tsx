@@ -8,7 +8,10 @@ const POSE_CYCLE: HiderPose[] = POSES.map((p) => p.id);
 
 function isTouchLike() {
   if (typeof window === "undefined") return false;
-  return navigator.maxTouchPoints > 0 || window.matchMedia("(any-pointer: coarse)").matches;
+  return navigator.maxTouchPoints > 0
+    || window.matchMedia("(any-pointer: coarse)").matches
+    || window.matchMedia("(max-width: 1024px)").matches
+    || window.matchMedia("(max-height: 600px)").matches;
 }
 
 export function VirtualControls({
@@ -157,7 +160,11 @@ export function VirtualControls({
   );
 
   return (
-    <div className={`touch-ui ${hiderMode ? "hider-layout" : seekerMode ? "seeker-layout" : ""}`} aria-hidden="false">
+    <div
+      className={`touch-ui ${hiderMode ? "hider-layout" : seekerMode ? "seeker-layout" : ""}`}
+      aria-hidden="false"
+      onPointerDownCapture={() => useGameStore.getState().setActiveSheet(null)}
+    >
       <div
         className="touch-look"
         onPointerDown={onLookDown}
