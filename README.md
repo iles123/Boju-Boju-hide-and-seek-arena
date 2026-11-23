@@ -17,6 +17,7 @@
 - Meccha Chameleon-inspired hide-and-seek feel: smooth WASD + mouse movement, jump/crouch, lock/pose to camouflage as a hider, 1P/3P/spectator camera modes
 - Procedural character animation and game-friendly HUD/UI
 - Virtual/mobile controls (on-screen joystick, look pad, jump/sprint/crouch/lock/camera/tag buttons) for touch devices and smaller screens
+- Bundled looping arena music with a visible MUSIC OFF / MUSIC ON toggle (default off until clicked)
 - **No-Docker local run**: API defaults to SQLite and in-memory rate limiting fallback when Redis is unavailable
 
 ## Local development (no Docker)
@@ -118,4 +119,4 @@ This repo is a monorepo with separate web and API services. A practical Render s
 
 ## Notes / limitations
 - Prototype phase: server manages phases/teams/elimination but client relays movement; full authoritative movement validation, anti-cheat, persistence of full match history, and horizontal scaling are future work.
-- Audio/BGM is user-provided (not bundled).
+- Audio/BGM is bundled at `apps/web/public/audio/legacy.mp3` and starts only after the user enables it.

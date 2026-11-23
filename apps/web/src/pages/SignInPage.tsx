@@ -34,21 +34,9 @@ export default function SignInPage() {
         <h2>Welcome back, hunter</h2>
         <p className="muted small">Sign in with your email or username to keep your gamer profile, paint, and stats.</p>
         {error && <p className="error">{error}</p>}
-        <label>Email or username<input value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="demo@bojuboju.com or DemoHunter" autoComplete="username" required /></label>
-        <PasswordInput label="Password" value={password} onChange={setPassword} placeholder="demo12345 for the local demo" autoComplete="current-password" required />
+        <label>Email or username<input value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="you@example.com or Hunter" autoComplete="username" required /></label>
+        <PasswordInput label="Password" value={password} onChange={setPassword} placeholder="Your password" autoComplete="current-password" required />
         <button className="btn" disabled={busy} type="submit">{busy ? "Signing in..." : "Sign in"}</button>
-        {import.meta.env.DEV && (
-          <button
-            className="link-btn"
-            type="button"
-            onClick={() => {
-              setIdentifier("demo@bojuboju.com");
-              setPassword("demo12345");
-            }}
-          >
-            Use local demo account
-          </button>
-        )}
         <div className="muted small row auth-links">
           <Link to="/forgot-password">Forgot password?</Link>
           <Link to="/signup">Create account</Link>

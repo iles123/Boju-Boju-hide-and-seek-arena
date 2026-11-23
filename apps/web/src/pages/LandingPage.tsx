@@ -2,7 +2,7 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getArenaStats } from "../lib/api";
-import type { ArenaStats } from "../lib/api";
+import type { ArenaStats, User } from "../lib/api";
 
 const EMPTY_ARENA_STATS: ArenaStats = {
   live_hunts: 0,
@@ -13,12 +13,7 @@ const EMPTY_ARENA_STATS: ArenaStats = {
   registered_players: 0,
 };
 
-const MARKET_QUESTS = [
-  { label: "GLOBAL MARKET", value: "$213.9B", note: "+6.1% YoY", progress: 76 },
-  { label: "ACTIVE PLAYERS", value: "3.70B", note: "+4.4% YoY", progress: 74 },
-  { label: "MOBILE SHARE", value: "57%", note: "$121.1B", progress: 57 },
-  { label: "AVG. SPEND", value: "$129.6", note: "per spender", progress: 65 },
-];
+const MAP_ROTATION = ["MARKET", "WAREHOUSE", "ROOFTOPS", "GARDEN", "ARCADE"];
 
 export function AnimatedGameBg({ compact = false }: { compact?: boolean }) {
   return (
@@ -75,9 +70,10 @@ export function AnimatedGameBg({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function LiveCard() {
+function LiveCard({ user }: { user?: User | null }) {
   const [stats, setStats] = useState<ArenaStats>(EMPTY_ARENA_STATS);
   const [syncedAt, setSyncedAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     let active = true;
@@ -100,61 +96,100 @@ function LiveCard() {
     };
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const fmt = (value: number) => value.toLocaleString("en-US");
   const squadLevel = Math.max(1, Math.floor(Math.sqrt(stats.registered_players + 1)));
-  const squadRemainder = (stats.registered_players + 1) % 100;
-  const squadProgress = squadRemainder;
-  const huntHeat = Math.min(100, stats.live_hunts * 18 + stats.hunters_active * 7);
-  const hideHeat = Math.min(100, stats.chameleons_hidden * 11);
+  const hiderWins = user?.stats.wins_as_hider ?? 0;
+  const seekerWins = user?.stats.wins_as_seeker ?? 0;
+  const games = user?.stats.games_played ?? 0;
+  const eliminations = user?.stats.eliminations ?? 0;
+  const survivalMinutes = Math.floor((user?.stats.survival_time_seconds ?? 0) / 60);
+  const camoLevel = Math.max(1, Math.floor(Math.sqrt(hiderWins + 1) * 2));
+  const camoProgress = Math.min(100, (hiderWins % 5) * 20);
+  const winRate = games ? Math.round(((hiderWins + seekerWins) / games) * 100) : 0;
+  const hiderShare = stats.players_online > 0 ? Math.round((stats.chameleons_hidden / stats.players_online) * 100) : 50;
+  const hunterShare = 100 - hiderShare;
+  const activeIndex = stats.live_hunts % MAP_ROTATION.length;
+  const dropDate = new Date(now);
+  dropDate.setUTCHours(24, 0, 0, 0);
+  const dropSeconds = Math.max(0, Math.floor((dropDate.getTime() - now) / 1000));
+  const dropLabel = `${String(Math.floor(dropSeconds / 3600)).padStart(2, "0")}:${String(Math.floor((dropSeconds % 3600) / 60)).padStart(2, "0")}:${String(dropSeconds % 60).padStart(2, "0")}`;
+  const missions = [
+    { label: "BLEND MASTER", detail: `${hiderWins} hider wins`, progress: camoProgress, tone: "green" },
+    { label: "SHARP EYES", detail: `${eliminations} tags`, progress: Math.min(100, eliminations * 4), tone: "rose" },
+    { label: "SURVIVOR", detail: `${survivalMinutes}m alive`, progress: Math.min(100, survivalMinutes * 2), tone: "cyan" },
+  ];
 
   return (
-    <section className="live-card" aria-label="Live arena stats">
+    <section className="live-card" aria-label="Live arena mission control">
       <div className="live-card-top">
-        <span className="live-title"><span className="live-pulse" />LIVE ARENA FEED</span>
-        <span className="live-sync">{syncedAt ? `SYNCED ${new Date(syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "CONNECTING"}</span>
+        <span className="live-title"><span className="live-pulse" />ARENA COMMAND</span>
+        <span className="live-sync"><span className={syncedAt ? "sync-dot live" : "sync-dot"} />{syncedAt ? `LIVE · ${new Date(syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "CONNECTING"}</span>
       </div>
       <div className="live-grid">
         <div className="live-metric">
-          <small>LIVE HUNTS</small>
+          <div className="metric-top"><small>LIVE HUNTS</small><span>ROUND</span></div>
           <strong>{fmt(stats.live_hunts)}</strong>
-          <div className="meter"><i style={{ width: `${huntHeat}%` }} /></div>
+          <div className="meter"><i style={{ width: `${Math.min(100, stats.live_hunts * 18 + stats.hunters_active * 7)}%` }} /></div>
         </div>
         <div className="live-metric">
-          <small>PLAYERS ONLINE</small>
+          <div className="metric-top"><small>ONLINE</small><span>NOW</span></div>
           <strong>{fmt(stats.players_online)}</strong>
           <div className="meter cyan"><i style={{ width: `${Math.min(100, stats.players_online * 8)}%` }} /></div>
         </div>
         <div className="live-metric">
-          <small>CHAMELEONS HIDDEN</small>
+          <div className="metric-top"><small>HIDDEN</small><span>CAMO</span></div>
           <strong>{fmt(stats.chameleons_hidden)}</strong>
-          <div className="meter green"><i style={{ width: `${hideHeat}%` }} /></div>
+          <div className="meter green"><i style={{ width: `${Math.min(100, stats.chameleons_hidden * 11)}%` }} /></div>
         </div>
         <div className="live-metric">
-          <small>OPEN LOBBIES</small>
+          <div className="metric-top"><small>LOBBIES</small><span>OPEN</span></div>
           <strong>{fmt(stats.open_lobbies)}</strong>
           <div className="meter amber"><i style={{ width: `${Math.min(100, stats.open_lobbies * 12)}%` }} /></div>
         </div>
       </div>
-      <div className="live-level">
-        <div className="live-level-head">
-          <span className="level-chip">SQUAD LV {squadLevel}</span>
-          <strong>{fmt(stats.registered_players)} REGISTERED</strong>
-          <span>{100 - squadRemainder} TO NEXT LV</span>
+      <div className="live-lower">
+        <div className="live-panel">
+          <div className="panel-head"><span>RANK PATH</span><strong>{user ? `CAMO LV ${camoLevel}` : "RECRUIT"}</strong></div>
+          <div className="rank-row">
+            <div className="rank-badge">{user ? camoLevel : 1}</div>
+            <div className="rank-copy">
+              <strong>{user?.profile.display_name || "Guest Scout"}</strong>
+              <small>{games} matches · {winRate}% win rate</small>
+            </div>
+            <div className="drop-clock"><small>NEXT DROP</small><strong>{dropLabel}</strong></div>
+          </div>
+          <div className="level-track"><i style={{ width: `${user ? camoProgress : 0}%` }} /></div>
+          <small className="panel-foot">{user ? `${5 - (hiderWins % 5)} hider wins to next camo level` : "Sign up to start earning camo rank"}</small>
         </div>
-        <div className="level-track"><i style={{ width: `${squadProgress}%` }} /></div>
+        <div className="live-panel">
+          <div className="panel-head"><span>ROLE BALANCE</span><strong>SQUAD LV {squadLevel}</strong></div>
+          <div className="role-bars">
+            <div>
+              <div className="role-label"><small>HIDERS</small><strong>{hiderShare}%</strong></div>
+              <div className="meter green"><i style={{ width: `${hiderShare}%` }} /></div>
+            </div>
+            <div>
+              <div className="role-label"><small>HUNTERS</small><strong>{hunterShare}%</strong></div>
+              <div className="meter rose"><i style={{ width: `${hunterShare}%` }} /></div>
+            </div>
+          </div>
+          <div className="map-strip">
+            {MAP_ROTATION.map((map, i) => <span key={map} className={i === activeIndex ? "map-chip active" : "map-chip"}>{map}</span>)}
+          </div>
+        </div>
       </div>
-      <div className="market-quests">
-        <div className="quest-head">
-          <strong>WORLD QUEST</strong>
-          <span>2026 MARKET INTEL</span>
-        </div>
-        <div className="quest-grid">
-          {MARKET_QUESTS.map((quest) => (
-            <div className="quest" key={quest.label}>
-              <small>{quest.label}</small>
-              <strong>{quest.value}</strong>
-              <span>{quest.note}</span>
-              <div className="meter quest-meter"><i style={{ width: `${quest.progress}%` }} /></div>
+      <div className="mission-board">
+        <div className="board-head"><strong>MISSION BOARD</strong><span>PLAYER OBJECTIVES</span></div>
+        <div className="mission-grid">
+          {missions.map((mission) => (
+            <div className="mission" key={mission.label}>
+              <div className="mission-head"><strong>{mission.label}</strong><small>{mission.detail}</small></div>
+              <div className={`meter ${mission.tone}`}><i style={{ width: `${mission.progress}%` }} /></div>
             </div>
           ))}
         </div>
@@ -183,7 +218,7 @@ export default function LandingPage() {
             <span className="pill">📱 Mobile + Desktop</span>
           </div>
 
-          <LiveCard />
+          <LiveCard user={user} />
 
           {user ? (
             <div className="stack hero-actions">

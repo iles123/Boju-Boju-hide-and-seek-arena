@@ -40,8 +40,6 @@ services:
         value: "true"
       - key: REFRESH_COOKIE_SAMESITE
         value: "none"
-      - key: DEMO_ACCOUNT_ENABLED
-        value: "true"
 
   - type: web
     name: boju-boju-web

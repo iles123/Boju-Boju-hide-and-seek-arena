@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
-from app.core.deps import utcnow
+from app.core.deps import as_utc, utcnow
 from app.core.rate_limit import client_ip, rate_limiter
 from app.core.security import (
     create_access_token,
@@ -223,7 +223,7 @@ async def refresh_session(db: AsyncSession, request: Request, response: Response
     )
     rt = result.scalar_one_or_none()
     now = utcnow()
-    if not rt or rt.revoked_at is not None or rt.expires_at <= now:
+    if not rt or rt.revoked_at is not None or as_utc(rt.expires_at) <= now:
         # possible reuse or stale; clear cookie
         response.delete_cookie(key=settings.refresh_cookie_name, path="/auth")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
@@ -300,7 +300,7 @@ async def reset_password(db: AsyncSession, payload: ResetPasswordRequest, reques
     )
     et = result.scalar_one_or_none()
     now = utcnow()
-    if not et or et.used_at is not None or et.expires_at <= now:
+    if not et or et.used_at is not None or as_utc(et.expires_at) <= now:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token")
 
     user_res = await db.execute(select(User).where(User.id == et.user_id))
@@ -328,7 +328,7 @@ async def verify_email(db: AsyncSession, payload: VerifyEmailRequest, request: R
     )
     et = result.scalar_one_or_none()
     now = utcnow()
-    if not et or et.used_at is not None or et.expires_at <= now:
+    if not et or et.used_at is not None or as_utc(et.expires_at) <= now:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token")
 
     user_res = await db.execute(select(User).where(User.id == et.user_id))

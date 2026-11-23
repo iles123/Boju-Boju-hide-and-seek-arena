@@ -1223,7 +1223,7 @@ class RoomManager:
             "phase_ends_at": room.phase_ends_at.isoformat() if room.phase_ends_at else None,
             "winner_team": room.winner_team,
             "map_id": room.map_id,
-            "created_at": room.created_at,
+            "created_at": room.created_at.isoformat() if room.created_at else None,
             "players": players,
         }
 

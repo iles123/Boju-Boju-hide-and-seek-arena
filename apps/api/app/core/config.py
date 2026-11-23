@@ -29,12 +29,6 @@ class Settings(BaseSettings):
     email_provider: str = "console"
     email_from: str = "no-reply@boju-boju.local"
 
-    demo_account_enabled: bool = True
-    demo_email: str = "demo@bojuboju.com"
-    demo_username: str = "DemoHunter"
-    demo_password: str = "demo12345"
-
-
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
