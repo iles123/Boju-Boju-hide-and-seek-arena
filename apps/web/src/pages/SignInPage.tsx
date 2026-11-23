@@ -1,11 +1,13 @@
 ﻿import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import PasswordInput from "../components/PasswordInput";
 import { useAuth } from "../context/AuthContext";
+import { AnimatedGameBg } from "./LandingPage";
 
 export default function SignInPage() {
   const { login } = useAuth();
   const nav = useNavigate();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -15,7 +17,7 @@ export default function SignInPage() {
     setError(null);
     setBusy(true);
     try {
-      await login(email, password);
+      await login(identifier, password);
       nav("/profile");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
@@ -25,17 +27,33 @@ export default function SignInPage() {
   }
 
   return (
-    <div className="page">
-      <form className="card form" onSubmit={onSubmit}>
-        <h2>Sign In</h2>
+    <div className="auth-wrap">
+      <AnimatedGameBg compact />
+      <form className="card form auth-card" onSubmit={onSubmit}>
+        <div className="auth-badge">BOJU BOJU ARENA</div>
+        <h2>Welcome back, hunter</h2>
+        <p className="muted small">Sign in with your email or username to keep your gamer profile, paint, and stats.</p>
         {error && <p className="error">{error}</p>}
-        <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
-        <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></label>
+        <label>Email or username<input value={identifier} onChange={(e) => setIdentifier(e.target.value)} placeholder="demo@bojuboju.com or DemoHunter" autoComplete="username" required /></label>
+        <PasswordInput label="Password" value={password} onChange={setPassword} placeholder="demo12345 for the local demo" autoComplete="current-password" required />
         <button className="btn" disabled={busy} type="submit">{busy ? "Signing in..." : "Sign in"}</button>
-        <div className="muted small row">
+        {import.meta.env.DEV && (
+          <button
+            className="link-btn"
+            type="button"
+            onClick={() => {
+              setIdentifier("demo@bojuboju.com");
+              setPassword("demo12345");
+            }}
+          >
+            Use local demo account
+          </button>
+        )}
+        <div className="muted small row auth-links">
           <Link to="/forgot-password">Forgot password?</Link>
           <Link to="/signup">Create account</Link>
         </div>
+        <Link className="btn secondary" to="/play">Continue as guest</Link>
       </form>
     </div>
   );

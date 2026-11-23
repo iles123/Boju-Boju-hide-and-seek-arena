@@ -15,9 +15,9 @@ export default function LobbyPage() {
   const [joinCode, setJoinCode] = useState("");
   const [joinCodePassword, setJoinCodePassword] = useState("");
 
-  async function refresh() {
+  async function refresh(silent = false) {
     try {
-      setError(null);
+      if (!silent) setError(null);
       const list = await api.listRooms();
       setRooms(list);
     } catch (e) {
@@ -29,7 +29,7 @@ export default function LobbyPage() {
 
   useEffect(() => {
     void refresh();
-    const t = setInterval(() => void refresh(), 5000);
+    const t = setInterval(() => void refresh(true), 5000);
     return () => clearInterval(t);
   }, []);
 

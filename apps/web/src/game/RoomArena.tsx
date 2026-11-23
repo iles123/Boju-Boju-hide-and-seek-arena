@@ -1,15 +1,18 @@
-﻿import { useEffect, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import type { Room, RoomPlayer } from "../lib/api";
-import { GreyboxMap } from "./components/GreyboxMap";
-import { PlayerRig, type PlayerPose } from "./components/PlayerRig";
+import { ArenaMap, getMapDef, pickHiderSpawn } from "./components/maps";
+import { CamouflageForm, ChameleonHumanoid, HunterGun, PlayerRig, type PaintFor, type PlayerMotion, type PlayerPose } from "./components/PlayerRig";
+
 import { SpectatorRig } from "./components/SpectatorRig";
 import { MouseLook } from "./MouseLook";
 import { VirtualControls } from "./VirtualControls";
 import { useGameStore, type HiderPose } from "./store";
+import { camoLabel, canvasFromDataUrl, computeCamoScore, createRegionTextures, getPose, getSizeScale, POSES, SIZES, type HiderSize } from "./paint";
+import { PaintPanel, EyedropperSampler } from "./PaintPanel";
 
 type RemoteState = {
   user_id?: string;
@@ -21,40 +24,74 @@ type RemoteState = {
   yaw?: number; pitch?: number;
   mode?: string; locked?: boolean;
   paintColor?: string;
+  tintColor?: string;
+  camoScore?: number;
   pose?: string;
+  size?: string;
 };
+
+type Shot = { id: number; at: number; origin: number[]; direction: number[]; hit: boolean };
+type DecoyState = { id?: string; owner_id?: string; username?: string; x?: number; y?: number; z?: number; yaw?: number; paintColor?: string; tintColor?: string; camoScore?: number; pose?: string; size?: string; locked?: boolean; dataUrl?: string };
 
 const PALETTE = ["#f8fafc", "#facc15", "#fb7185", "#38bdf8", "#4ade80", "#a78bfa", "#f97316", "#64748b", "#92400e", "#16a34a"];
 
-function CamouflageFormRemote({ pose, color, locked }: { pose: string; color: string; locked: boolean }) {
+function useRemotePaintFor(dataUrl: string | undefined, fallbackColor: string, tintColor?: string): PaintFor {
+  const [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  useEffect(() => {
+    if (!dataUrl) { setCanvas(null); return; }
+    let alive = true;
+    canvasFromDataUrl(dataUrl).then((c) => { if (alive) setCanvas(c); }).catch(() => { if (alive) setCanvas(null); });
+    return () => { alive = false; };
+  }, [dataUrl]);
+  const textures = useMemo(() => canvas ? createRegionTextures(canvas) : null, [canvas]);
+  useEffect(() => () => {
+    if (textures) Object.values(textures).forEach((t) => t.dispose());
+  }, [textures]);
+  return useMemo(() => (region) => textures ? { map: textures[region], color: tintColor || "#ffffff" } : { color: tintColor || fallbackColor }, [textures, fallbackColor, tintColor]);
+}
+
+function poseOffset(pose: string) {
+  const p = getPose(pose);
+  return p.halfH + p.radius;
+}
+
+function CamouflageFormRemote({ pose, color, locked, camoScore = 0 }: { pose: string; color: string; locked: boolean; camoScore?: number }) {
   const g = useRef<THREE.Group>(null);
   const t = useRef(Math.random() * 10);
   useFrame((_, dt) => {
     t.current += dt;
     if (!g.current) return;
-    const wobble = locked ? Math.sin(t.current * 2.2) * 0.008 : Math.sin(t.current * 1.8) * 0.015;
+    const wobble = locked ? Math.sin(t.current * 2.2) * (0.008 - camoScore / 22000) : Math.sin(t.current * 1.8) * 0.015;
     g.current.scale.setScalar(1 + wobble);
   });
   const emissive = locked ? color : "#000000";
   const ei = locked ? 0.12 : 0;
-  if (pose === "prone") {
+  const shape = getPose(pose).camoShape;
+  if (shape === "prone") {
     return (
       <group ref={g}>
         <mesh castShadow position={[0, 0.22, 0]}><boxGeometry args={[1.1, 0.35, 1.1]} /><meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={ei} roughness={0.85} /></mesh>
       </group>
     );
   }
-  if (pose === "tuck") {
+  if (shape === "tuck" || shape === "lean") {
     return (
       <group ref={g}>
         <mesh castShadow position={[0, 0.65, 0]}><cylinderGeometry args={[0.32, 0.38, 1.2, 12]} /><meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={ei} roughness={0.8} /></mesh>
       </group>
     );
   }
-  if (pose === "crouch") {
+  if (shape === "crouch") {
     return (
       <group ref={g}>
         <mesh castShadow position={[0, 0.38, 0]}><boxGeometry args={[0.78, 0.68, 0.78]} /><meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={ei} roughness={0.85} /></mesh>
+      </group>
+    );
+  }
+  if (shape === "wide") {
+    return (
+      <group ref={g}>
+        <mesh castShadow position={[0, 0.62, 0]}><boxGeometry args={[1.05, 1.05, 0.7]} /><meshStandardMaterial color={color} emissive={emissive} emissiveIntensity={ei} roughness={0.82} /></mesh>
       </group>
     );
   }
@@ -65,7 +102,7 @@ function CamouflageFormRemote({ pose, color, locked }: { pose: string; color: st
   );
 }
 
-function HunterRemote({ moving, speed }: { moving: boolean; speed: number }) {
+function HunterRemote({ motion }: { motion: React.MutableRefObject<PlayerMotion> }) {
   const g = useRef<THREE.Group>(null);
   const lLeg = useRef<THREE.Mesh>(null);
   const rLeg = useRef<THREE.Mesh>(null);
@@ -74,6 +111,7 @@ function HunterRemote({ moving, speed }: { moving: boolean; speed: number }) {
   const t = useRef(Math.random() * Math.PI * 2);
   useFrame((_, dt) => {
     t.current += dt;
+    const { moving, speed } = motion.current;
     const sf = THREE.MathUtils.clamp(speed / 4, 0.6, 1.8);
     const swing = moving ? Math.sin(t.current * 10.5 * sf) * 0.5 : 0;
     if (lLeg.current) lLeg.current.rotation.x = swing;
@@ -91,11 +129,13 @@ function HunterRemote({ moving, speed }: { moving: boolean; speed: number }) {
       <mesh ref={rLeg} castShadow position={[0.14, 0.33, 0]}><boxGeometry args={[0.17, 0.48, 0.19]} /><meshStandardMaterial color="#1f2937" /></mesh>
       <mesh ref={lArm} castShadow position={[-0.4, 0.84, 0]}><boxGeometry args={[0.13, 0.44, 0.15]} /><meshStandardMaterial color="#991b1b" /></mesh>
       <mesh ref={rArm} castShadow position={[0.4, 0.84, 0]}><boxGeometry args={[0.13, 0.44, 0.15]} /><meshStandardMaterial color="#991b1b" /></mesh>
+      <group position={[0.4, 0.82, -0.24]}><HunterGun scale={0.8} /></group>
     </group>
+
   );
 }
 
-function ChameleonRemote({ color, moving, speed }: { color: string; moving: boolean; speed: number }) {
+function ChameleonRemote({ color, motion }: { color: string; motion: React.MutableRefObject<PlayerMotion> }) {
   const g = useRef<THREE.Group>(null);
   const lLeg = useRef<THREE.Mesh>(null);
   const rLeg = useRef<THREE.Mesh>(null);
@@ -104,6 +144,7 @@ function ChameleonRemote({ color, moving, speed }: { color: string; moving: bool
   const t = useRef(Math.random() * Math.PI * 2);
   useFrame((_, dt) => {
     t.current += dt;
+    const { moving, speed } = motion.current;
     const sf = THREE.MathUtils.clamp(speed / 4, 0.6, 1.8);
     const swing = moving ? Math.sin(t.current * 10.2 * sf) * 0.45 : 0;
     if (lLeg.current) lLeg.current.rotation.x = swing;
@@ -124,12 +165,11 @@ function ChameleonRemote({ color, moving, speed }: { color: string; moving: bool
   );
 }
 
-function RemotePlayer({ state, label }: { state: RemoteState; label: string }) {
+function RemotePlayer({ state, label, paintTexture, shimmer, hideTag }: { state: RemoteState; label: string; paintTexture?: string; shimmer?: boolean; hideTag?: boolean }) {
   const ref = useRef<THREE.Group>(null);
   const target = useRef(new THREE.Vector3(state.x ?? 0, state.y ?? 2, state.z ?? 20));
   const yaw = useRef(state.yaw ?? 0);
-  const moving = useRef(false);
-  const moveSpeed = useRef(0);
+  const motion = useRef<PlayerMotion>({ moving: false, grounded: true, speed: 0 });
   const still = useRef(0);
   useEffect(() => {
     target.current.set(state.x ?? 0, state.y ?? 2, state.z ?? 20);
@@ -142,25 +182,58 @@ function RemotePlayer({ state, label }: { state: RemoteState; label: string }) {
     ref.current.position.lerp(target.current, k);
     ref.current.rotation.y = THREE.MathUtils.lerp(ref.current.rotation.y, yaw.current, k);
     const moved = before.distanceTo(ref.current.position);
-    moveSpeed.current = moved / Math.max(dt, 0.0001);
-    if (moved > 0.0015) { moving.current = true; still.current = 0; } else { still.current += dt; if (still.current > 0.14) moving.current = false; }
+    motion.current.speed = moved / Math.max(dt, 0.0001);
+    if (moved > 0.0015) { motion.current.moving = true; still.current = 0; } else { still.current += dt; if (still.current > 0.14) motion.current.moving = false; }
   });
   const isSpectator = state.is_spectator || state.team === "spectator" || state.alive === false;
-  if (isSpectator) return null;
   const isSeeker = state.team === "seeker";
   const pose = (state.pose as string) || "stand";
-  const paint = state.paintColor || "#94a3b8";
+  const paint = state.paintColor || "#f8fafc";
+  const tint = state.tintColor || paint;
+  const paintFor = useRemotePaintFor(paintTexture, paint, state.tintColor);
+  if (isSpectator) return null;
   const locked = !!state.locked && !isSeeker;
   const useCamouflage = !isSeeker && (locked || pose !== "stand");
   const tag = isSeeker ? " [Hunter]" : locked ? " [blended]" : (pose !== "stand" ? ` [${pose}]` : "");
+  const off = poseOffset(pose);
   return (
     <group ref={ref} position={[state.x ?? 0, state.y ?? 2, state.z ?? 20]}>
-      {isSeeker ? <HunterRemote moving={moving.current} speed={moveSpeed.current} /> : useCamouflage ? <CamouflageFormRemote pose={pose} color={paint} locked={locked} /> : <ChameleonRemote color={paint} moving={moving.current} speed={moveSpeed.current} />}
-      <Html position={[0, 1.75, 0]} center distanceFactor={14} style={{ pointerEvents: "none" }}>
-        <div style={{ background: "rgba(15,23,42,0.78)", color: "#fff", padding: "2px 6px", borderRadius: 6, fontSize: 11, whiteSpace: "nowrap", border: isSeeker ? "1px solid #ef4444" : "1px solid #22c55e" }}>
-          {label}{tag}
-        </div>
-      </Html>
+      <group position={[0, -off, 0]} scale={isSeeker ? 1 : getSizeScale(state.size)}>
+        {isSeeker ? <HunterRemote motion={motion} />
+          : paintTexture ? (useCamouflage
+            ? <CamouflageForm pose={getPose(pose).id} paintColor={tint} paintFor={paintFor} locked={locked} camoScore={state.camoScore} />
+            : <ChameleonHumanoid paintFor={paintFor} motion={motion} />)
+          : useCamouflage ? <CamouflageFormRemote pose={pose} color={tint} locked={locked} camoScore={state.camoScore} /> : <ChameleonRemote color={tint} motion={motion} />}
+      </group>
+      {shimmer && (
+        <mesh position={[0, -off + 0.75, 0]}>
+          <sphereGeometry args={[0.78, 12, 10]} />
+          <meshBasicMaterial color="#fb7185" wireframe transparent opacity={0.6} />
+        </mesh>
+      )}
+      {!hideTag && (
+        <Html position={[0, -off + 1.75, 0]} center distanceFactor={14} style={{ pointerEvents: "none" }}>
+          <div style={{ background: "rgba(15,23,42,0.78)", color: "#fff", padding: "2px 6px", borderRadius: 6, fontSize: 11, whiteSpace: "nowrap", border: isSeeker ? "1px solid #ef4444" : "1px solid #22c55e" }}>
+            {label}{tag}
+          </div>
+        </Html>
+      )}
+    </group>
+  );
+}
+
+function DecoyPlayer({ decoy, paintTexture }: { decoy: DecoyState; paintTexture?: string }) {
+  const paintFor = useRemotePaintFor(paintTexture, decoy.paintColor || "#f8fafc", decoy.tintColor);
+  const pose = decoy.pose || "stand";
+  const off = poseOffset(pose);
+  const color = decoy.tintColor || decoy.paintColor || "#f8fafc";
+  return (
+    <group position={[decoy.x ?? 0, decoy.y ?? 0, decoy.z ?? 0]} rotation={[0, decoy.yaw ?? 0, 0]}>
+      <group position={[0, -off, 0]} scale={getSizeScale(decoy.size)}>
+        {paintTexture
+          ? <CamouflageForm pose={getPose(pose).id} paintColor={color} paintFor={paintFor} locked={true} camoScore={decoy.camoScore} />
+          : <CamouflageFormRemote pose={pose} color={color} locked={true} camoScore={decoy.camoScore} />}
+      </group>
     </group>
   );
 }
@@ -197,8 +270,69 @@ function TagDetector({ enabled, myPoseRef, remoteStates, players, bestRef, onBes
   return null;
 }
 
-function ArenaScene({ room, meId, myPlayer, remoteStates, send, myPoseRef, bestTagRef, onBest }: {
-  room: Room; meId: string; myPlayer: RoomPlayer | null; remoteStates: Record<string, RemoteState>;
+function SeekerCombat({ enabled, send }: { enabled: boolean; send: (type: string, payload?: unknown) => void }) {
+  const { camera, gl } = useThree();
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  const combatAction = useGameStore((s) => s.combatAction);
+  const lastActionSeq = useRef(0);
+  const fire = useCallback((spot: boolean) => {
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    const payload = {
+      origin: [camera.position.x, camera.position.y, camera.position.z],
+      direction: [dir.x, dir.y, dir.z],
+    };
+    sendRef.current(spot ? "player.spot" : "player.shoot", payload);
+  }, [camera]);
+  useEffect(() => {
+    if (!enabled || !combatAction || combatAction.seq === lastActionSeq.current) return;
+    lastActionSeq.current = combatAction.seq;
+    if (combatAction.type === "reload") sendRef.current("player.reload");
+    else fire(combatAction.type === "spot");
+  }, [enabled, combatAction, fire]);
+  useEffect(() => {
+    if (!enabled) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (e.button === 0) fire(false);
+      if (e.button === 2) { e.preventDefault(); fire(true); }
+    };
+    const onContextMenu = (e: MouseEvent) => e.preventDefault();
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (e.code === "KeyR") sendRef.current("player.reload");
+      if (e.code === "KeyQ") fire(true);
+    };
+    gl.domElement.addEventListener("pointerdown", onPointerDown);
+    gl.domElement.addEventListener("contextmenu", onContextMenu);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      gl.domElement.removeEventListener("pointerdown", onPointerDown);
+      gl.domElement.removeEventListener("contextmenu", onContextMenu);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [enabled, gl, fire]);
+  return null;
+}
+
+function Tracer({ shot }: { shot: Shot }) {
+  const geometry = useMemo(() => {
+    const start = new THREE.Vector3(shot.origin[0], shot.origin[1], shot.origin[2]);
+    const dir = new THREE.Vector3(shot.direction[0], shot.direction[1], shot.direction[2]).normalize();
+    return new THREE.BufferGeometry().setFromPoints([start, start.clone().addScaledVector(dir, 60)]);
+  }, [shot.origin, shot.direction]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial color={shot.hit ? "#fde68a" : "#7dd3fc"} transparent opacity={0.75} />
+    </lineSegments>
+  );
+}
+
+function ArenaScene({ room, meId, myPlayer, remoteStates, remotePaintTextures, decoys, shimmerIds, shots, send, myPoseRef, bestTagRef, onBest }: {
+  room: Room; meId: string; myPlayer: RoomPlayer | null; remoteStates: Record<string, RemoteState>; remotePaintTextures: Record<string, string>;
+  decoys: DecoyState[]; shimmerIds: Record<string, number>; shots: Shot[];
   send: (t: string, p?: unknown) => void; myPoseRef: React.MutableRefObject<PlayerPose | null>; bestTagRef: React.MutableRefObject<string | null>;
   onBest: (id: string | null) => void;
 }) {
@@ -218,16 +352,18 @@ function ArenaScene({ room, meId, myPlayer, remoteStates, send, myPoseRef, bestT
     }
   }, [isPlayable, mode]);
 
-  const spawn: [number, number, number] = role === "seeker" ? [0, 2, 24] : [0, 2, 16];
+  const mapDef = useMemo(() => getMapDef(room.map_id), [room.map_id]);
+  const myIndex = Math.max(0, room.players.filter(p => p.team === "hider" || (!p.is_spectator && p.team !== "seeker")).findIndex(p => p.user_id === meId));
+  const spawn: [number, number, number] = role === "seeker" ? mapDef.seekerSpawn : pickHiderSpawn(mapDef, myIndex);
   const others = Object.values(remoteStates).filter((s) => s.user_id && s.user_id !== meId);
 
   return (
     <>
-      <ambientLight intensity={0.75} />
-      <directionalLight position={[10, 20, 10]} intensity={1.15} castShadow />
-      <hemisphereLight args={["#dbeafe", "#86a873", 0.35]} />
+      <ambientLight intensity={mapDef.ambient} />
+      <directionalLight position={mapDef.sun} intensity={1.15} castShadow />
+      <hemisphereLight args={[mapDef.hemi[0], mapDef.hemi[1], mapDef.hemi[2]]} />
       <Physics gravity={[0, -9.81, 0]}>
-        <GreyboxMap />
+        <ArenaMap mapId={room.map_id} />
         {isPlayable && (
           <PlayerRig
             yawRef={yawRef}
@@ -242,43 +378,69 @@ function ArenaScene({ room, meId, myPlayer, remoteStates, send, myPoseRef, bestT
             }}
           />
         )}
-        {others.map((s) => (
-          <RemotePlayer key={s.user_id || "remote"} state={s} label={s.username || (s.user_id || "?").slice(0, 6)} />
-        ))}
+        {others.map((s) => {
+          const shimmer = (shimmerIds[s.user_id || ""] ?? 0) > Date.now();
+          const blended = !!s.locked && (s.camoScore ?? 0) >= 62;
+          return <RemotePlayer key={s.user_id || "remote"} state={s} label={s.username || (s.user_id || "?").slice(0, 6)} paintTexture={remotePaintTextures[s.user_id || ""]} shimmer={shimmer} hideTag={role === "seeker" && blended && !shimmer} />;
+        })}
+        {decoys.map((d) => <DecoyPlayer key={d.id || `${d.owner_id}-${d.x}-${d.z}`} decoy={d} paintTexture={d.dataUrl || (d.owner_id ? remotePaintTextures[d.owner_id] : undefined)} />)}
         <TagDetector enabled={seekerCanTag} myPoseRef={myPoseRef} remoteStates={remoteStates} players={room.players} bestRef={bestTagRef} onBest={onBest} />
+        {shots.map((shot) => <Tracer key={shot.id} shot={shot} />)}
       </Physics>
+      <SeekerCombat enabled={seekerCanTag} send={send} />
       <MouseLook yawRef={yawRef} pitchRef={pitchRef} active={true} />
+      <EyedropperSampler enabled={role === "hider" && phase !== "seeking"} />
       {(mode === "spectator" || !isPlayable) && <SpectatorRig yawRef={yawRef} pitchRef={pitchRef} />}
-      <color attach="background" args={["#bfdbfe"]} />
-      <fog attach="fog" args={["#bfdbfe", 25, 110]} />
+      <color attach="background" args={[mapDef.sky]} />
+      <fog attach="fog" args={[mapDef.fog[0], mapDef.fog[1], mapDef.fog[2]]} />
     </>
   );
 }
 
 function isTouchLikeEvent(e: React.PointerEvent | PointerEvent | unknown) {
   const pe = e as { pointerType?: string };
-  if (pe?.pointerType === "touch") return true;
-  if (typeof window === "undefined") return false;
-  return "ontouchstart" in window || navigator.maxTouchPoints > 0;
+  return pe?.pointerType === "touch" || pe?.pointerType === "pen";
 }
 
-export function RoomArena({ room, meId, myPlayer, remoteStates, send }: {
+export function RoomArena({ room, meId, myPlayer, remoteStates, remotePaintTextures, decoys, scores, shimmerIds, shots, notice, send }: {
   room: Room;
   meId: string;
   myPlayer: RoomPlayer | null;
   remoteStates: Record<string, RemoteState>;
+  remotePaintTextures: Record<string, string>;
+  decoys: DecoyState[];
+  scores: Record<string, number>;
+  shimmerIds: Record<string, number>;
+  shots: Shot[];
+  notice?: string | null;
   send: (type: string, payload?: unknown) => void;
 }) {
   const myPoseRef = useRef<PlayerPose | null>(null);
   const bestTagRef = useRef<string | null>(null);
+  const paintUploadedRef = useRef(false);
   const [eventMsg, setEventMsg] = useState<string | null>(null);
   const [canTagNow, setCanTagNow] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [camoOpen, setCamoOpen] = useState(false);
+  const [hudOpen, setHudOpen] = useState(false);
+
   const paintColor = useGameStore((s) => s.paintColor);
   const setPaintColor = useGameStore((s) => s.setPaintColor);
   const pose = useGameStore((s) => s.pose);
   const setPose = useGameStore((s) => s.setPose);
+  const hiderSize = useGameStore((s) => s.hiderSize);
+  const setHiderSize = useGameStore((s) => s.setHiderSize);
   const locked = useGameStore((s) => s.locked);
+  const setLocked = useGameStore((s) => s.setLocked);
+  const sampledWorldColor = useGameStore((s) => s.sampledWorldColor);
+  const paintCompleteness = useGameStore((s) => s.paintCompleteness);
+  const requestWorldSample = useGameStore((s) => s.requestWorldSample);
+  const camoScore = computeCamoScore({ pose, size: hiderSize, locked, paintCompleteness, sampledWorldColor });
+  const ammo = useGameStore((s) => s.ammo);
+  const gunReloading = useGameStore((s) => s.gunReloading);
+  const gunSlowRemaining = useGameStore((s) => s.gunSlowRemaining);
+  const paintOpen = useGameStore((s) => s.paintOpen);
+  const setPaintOpen = useGameStore((s) => s.setPaintOpen);
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 500); return () => clearInterval(t); }, []);
 
   useEffect(() => {
@@ -294,13 +456,56 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, send }: {
   const remaining = ends ? Math.max(0, Math.ceil((ends - now) / 1000)) : null;
   const seekers = room.players.filter(p => p.team === "seeker").length;
   const hidersAlive = room.players.filter(p => p.team === "hider" && p.alive !== false).length;
+  const mapDef = getMapDef(room.map_id);
 
-  const doTag = () => {
-    if (seekerCanTag && bestTagRef.current) {
-      send("player.tag", { target_id: bestTagRef.current });
-      setEventMsg("Tagged a chameleon!");
+  useEffect(() => {
+    if (phase === "hiding" || phase === "lobby") paintUploadedRef.current = false;
+  }, [phase]);
+
+  useEffect(() => {
+    if (role !== "hider" || phase === "seeking" || phase === "ended") {
+      if (useGameStore.getState().paintOpen) setPaintOpen(false);
+      return;
     }
-  };
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (e.code === "KeyF") setPaintOpen(!useGameStore.getState().paintOpen);
+      if (e.code === "Escape" && useGameStore.getState().paintOpen) setPaintOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [role, phase, setPaintOpen]);
+
+  useEffect(() => {
+    if (role !== "hider" || myPlayer?.alive === false || phase === "ended") return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (e.repeat) return;
+      if (e.code === "KeyB") send("decoy.place", {});
+      if (e.code === "KeyV") send("hider.whistle");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [role, phase, myPlayer?.alive, send]);
+
+
+  useEffect(() => {
+    if (role !== "hider" || myPlayer?.alive === false || phase === "ended") return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (e.repeat) return;
+      const st = useGameStore.getState();
+      if (e.code === "KeyL") st.setLocked(!st.locked);
+      if (e.code === "Digit1") st.setCameraMode("first");
+      if (e.code === "Digit2") st.setCameraMode("third");
+      if (e.code === "Digit3") st.setCameraMode("spectator");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [role, phase, myPlayer?.alive]);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement | null;
@@ -311,7 +516,6 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, send }: {
         try { el.requestPointerLock(); } catch { /* ignore */ }
       }
     }
-    if (seekerCanTag) doTag();
   };
 
   const statusText = phase === "hiding" && role === "seeker" ? "Hunters wait... chameleons are hiding!"
@@ -322,34 +526,61 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, send }: {
     : "Hunt & Seek Lobby";
 
   const phaseClass = phase === "hiding" ? "hiding" : phase === "seeking" ? "seeking" : phase === "ended" ? "ended" : "";
-  const poseOptions: { id: HiderPose; label: string }[] = [{ id: "stand", label: "Stand" }, { id: "crouch", label: "Box" }, { id: "prone", label: "Flat" }, { id: "tuck", label: "Tall" }];
+  const poseOptions: { id: HiderPose; label: string }[] = POSES.map((p) => ({ id: p.id as HiderPose, label: p.label }));
+
+  const handlePaintApply = (dataUrl: string, completeness: number) => {
+    if (role !== "hider" || phase !== "hiding") {
+      setEventMsg("Paint can only be uploaded during hiding.");
+      return;
+    }
+    if (paintUploadedRef.current) {
+      setEventMsg("Paint already uploaded for this round.");
+      return;
+    }
+    paintUploadedRef.current = true;
+    send("paint.upload", { dataUrl, completeness });
+    setEventMsg("Paint uploaded — others see it when the hunt begins.");
+  };
 
   return (
     <div className="game-root arena-root huntseek-root" style={{ position: "relative", inset: 0, height: "100%" }} onPointerDown={onPointerDown}>
       <Canvas shadows camera={{ fov: 75, position: [0, 4, 24] }}>
-        <ArenaScene room={room} meId={meId} myPlayer={myPlayer} remoteStates={remoteStates} send={send} myPoseRef={myPoseRef} bestTagRef={bestTagRef} onBest={(id) => setCanTagNow(!!id)} />
+        <ArenaScene room={room} meId={meId} myPlayer={myPlayer} remoteStates={remoteStates} remotePaintTextures={remotePaintTextures} decoys={decoys} shimmerIds={shimmerIds} shots={shots} send={send} myPoseRef={myPoseRef} bestTagRef={bestTagRef} onBest={(id) => setCanTagNow(!!id)} />
       </Canvas>
       <div className="game-overlay huntseek-overlay">
-        <div className="game-topbar huntseek-topbar">
+        <button className="mobile-sheet-toggle hud-toggle" onPointerDown={() => setHudOpen((v) => !v)}>{hudOpen ? "Close" : "HUD"}</button>
+        {role === "hider" && myPlayer?.alive !== false && <button className="mobile-sheet-toggle camo-toggle" onPointerDown={() => setCamoOpen((v) => !v)}>{camoOpen ? "Close" : "Blend"}</button>}
+        <div className={`game-topbar huntseek-topbar ${hudOpen ? "mobile-open" : ""}`}>
+
           <div className="arena-hud-stats">
             <strong className="brand-pill">Meccha Hunt & Seek</strong>
+            <span className="badge">Map: {mapDef.name}</span>
             <span className={`badge ${phase === "seeking" ? "live" : ""}`}>Phase: {phase}{remaining != null ? ` ${remaining}s` : ""}</span>
             <span className={`badge ${role === "seeker" ? "seeker" : role === "hider" ? "hider" : ""}`}>You: {role === "seeker" ? "Hunter" : role === "hider" ? "Chameleon" : role}{myPlayer?.alive === false ? " (caught)" : ""}</span>
           </div>
           <div className="arena-hud-stats">
             <span className="stat-chip bad">Hunters: {seekers}</span>
             <span className="stat-chip good">Chameleons: {hidersAlive}</span>
+            <span className="stat-chip">Score: {scores[meId] ?? 0}</span>
+            {role === "seeker" && phase === "seeking" && (
+              <>
+                <span className={`stat-chip ${ammo <= 3 ? "bad" : ""}`}>Ammo: {ammo}/12</span>
+                {gunReloading && <span className="stat-chip warn">Reloading...</span>}
+                {gunSlowRemaining > 0 && <span className="stat-chip bad">Miss penalty</span>}
+              </>
+            )}
             {room.winner_team && <span className="stat-chip warn">Winner: {room.winner_team === "seekers" ? "Hunters" : "Chameleons"}</span>}
           </div>
           <div className={`phase-banner ${phaseClass}`}>{statusText}</div>
         </div>
-        {eventMsg && <div className="game-locked" style={{ top: 86 }}>{eventMsg}</div>}
-        {canTagNow && seekerCanTag && <div className="game-locked pulse-danger" style={{ top: 86, background: "rgba(220,38,38,0.92)" }}>Target spotted! Tap/click to TAG</div>}
+        {(eventMsg || notice) && <div className="game-locked" style={{ top: 86 }}>{eventMsg || notice}</div>}
+        {canTagNow && seekerCanTag && <div className="game-locked pulse-danger" style={{ top: 128, background: "rgba(220,38,38,0.92)" }}>Target nearby! Aim & fire (Q pings for your team)</div>}
         <div className="game-crosshair">+</div>
 
         {role === "hider" && myPlayer?.alive !== false && (
-          <div className="camouflage-bar">
-            <div className="camo-title">🎨 Paint & Blend {locked ? "(Locked)" : ""}</div>
+          <div className={`camouflage-bar ${camoOpen ? "mobile-open" : ""}`}>
+
+            <div className="camo-title">Paint & Blend {locked ? "(Locked)" : ""}</div>
             <div className="palette-row">
               {PALETTE.map((c) => (
                 <button key={c} className={`swatch ${paintColor === c ? "active" : ""}`} style={{ background: c }} onClick={() => setPaintColor(c)} title={c} />
@@ -361,16 +592,31 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, send }: {
                 <button key={p.id} className={`btn secondary pose-btn ${pose === p.id ? "active" : ""}`} onClick={() => setPose(p.id)}>{p.label}</button>
               ))}
             </div>
-            <div className="small muted camo-hint">Pick a color to match props, choose a pose/form, then Lock to blend in.</div>
+            <div className="pose-row">
+              {SIZES.map((s) => (
+                <button key={s.id} className={`btn secondary pose-btn ${hiderSize === s.id ? "active" : ""}`} onClick={() => setHiderSize(s.id as HiderSize)}>{s.label}</button>
+              ))}
+            </div>
+            <div className="row">
+              <button className={`btn ${locked ? "warn" : ""}`} onClick={() => setLocked(!locked)}>{locked ? "Unlock / Move (L)" : "Lock / Blend (L)"}</button>
+              <button className="btn secondary" onClick={() => requestWorldSample()}>Sample surface</button>
+              {sampledWorldColor && <span className="swatch sampled" style={{ background: sampledWorldColor }} title={sampledWorldColor} />}
+              <span className={`stat-chip ${camoScore >= 62 ? "good" : camoScore >= 40 ? "warn" : "bad"}`}>Blend {camoScore} · {camoLabel(camoScore)}</span>
+            </div>
+            <div className="row">
+              <button className="btn" onClick={() => setPaintOpen(true)}>Paint & Pose (F)</button>
+              <span className="small muted camo-hint">Sample a nearby surface, paint, pick a prop-like pose, then Lock. High blend hides your tag and reduces shimmer.</span>
+            </div>
           </div>
         )}
 
-        <div className="game-panel arena-panel huntseek-panel">
-          <div className="small muted">Desktop: WASD move, mouse look, Space jump, Shift sprint, C crouch, 1/2/3 camera, L lock/blend, F spectator follow. Mobile: joystick, look pad, buttons.</div>
-          <div className="small muted">Chameleons: paint yourself, pick a pose, stay still and Lock to camouflage. Hunters: spot anything odd and tag it!</div>
+          <div className="game-panel arena-panel huntseek-panel">
+            <div className="small muted">Desktop: WASD move, mouse look, Space jump, Shift sprint, C crouch, Z prone, 1/2/3 camera, L lock/blend, F paint, G spectator follow. Hunters: left click shoot, R reload, right click/Q spot ping.</div>
+            <div className="small muted">Chameleons: F paint, B place painted decoy (max 3), V whistle to reset the forced-taunt timer. Hunters: spot anything odd, aim and shoot — missed shots cost ammo and slow you down; decoys waste ammo but are not hiders.</div>
+          </div>
+          <PaintPanel open={paintOpen && role === "hider" && phase !== "seeking"} onClose={() => setPaintOpen(false)} onApply={handlePaintApply} />
         </div>
+        <VirtualControls layout={role === "seeker" ? "seeker" : "hider"} showCombat={role === "seeker" && seekerCanTag} showPaint={role === "hider" && phase !== "seeking" && myPlayer?.alive !== false} showTricks={role === "hider" && myPlayer?.alive !== false && phase !== "ended"} onDecoy={() => send("decoy.place", {})} onWhistle={() => send("hider.whistle")} />
       </div>
-      <VirtualControls showTag={role === "seeker"} canTag={seekerCanTag && canTagNow} onTag={doTag} />
-    </div>
   );
 }

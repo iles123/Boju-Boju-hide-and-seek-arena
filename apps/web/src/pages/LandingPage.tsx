@@ -1,9 +1,28 @@
-﻿import { Link } from "react-router-dom";
+﻿import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { getArenaStats } from "../lib/api";
+import type { ArenaStats } from "../lib/api";
 
-function AnimatedGameBg() {
+const EMPTY_ARENA_STATS: ArenaStats = {
+  live_hunts: 0,
+  open_lobbies: 0,
+  players_online: 0,
+  chameleons_hidden: 0,
+  hunters_active: 0,
+  registered_players: 0,
+};
+
+const MARKET_QUESTS = [
+  { label: "GLOBAL MARKET", value: "$213.9B", note: "+6.1% YoY", progress: 76 },
+  { label: "ACTIVE PLAYERS", value: "3.70B", note: "+4.4% YoY", progress: 74 },
+  { label: "MOBILE SHARE", value: "57%", note: "$121.1B", progress: 57 },
+  { label: "AVG. SPEND", value: "$129.6", note: "per spender", progress: 65 },
+];
+
+export function AnimatedGameBg({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="landing-bg" aria-hidden="true">
+    <div className={`landing-bg ${compact ? "auth-bg" : ""}`} aria-hidden="true">
       <div className="bg-gradient" />
       <div className="bg-grid" />
       <div className="bg-orb orb-a" />
@@ -56,6 +75,94 @@ function AnimatedGameBg() {
   );
 }
 
+function LiveCard() {
+  const [stats, setStats] = useState<ArenaStats>(EMPTY_ARENA_STATS);
+  const [syncedAt, setSyncedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      try {
+        const next = await getArenaStats();
+        if (active) {
+          setStats(next);
+          setSyncedAt(Date.now());
+        }
+      } catch {
+        if (active) setSyncedAt(null);
+      }
+    };
+    void load();
+    const timer = window.setInterval(load, 10000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const fmt = (value: number) => value.toLocaleString("en-US");
+  const squadLevel = Math.max(1, Math.floor(Math.sqrt(stats.registered_players + 1)));
+  const squadRemainder = (stats.registered_players + 1) % 100;
+  const squadProgress = squadRemainder;
+  const huntHeat = Math.min(100, stats.live_hunts * 18 + stats.hunters_active * 7);
+  const hideHeat = Math.min(100, stats.chameleons_hidden * 11);
+
+  return (
+    <section className="live-card" aria-label="Live arena stats">
+      <div className="live-card-top">
+        <span className="live-title"><span className="live-pulse" />LIVE ARENA FEED</span>
+        <span className="live-sync">{syncedAt ? `SYNCED ${new Date(syncedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "CONNECTING"}</span>
+      </div>
+      <div className="live-grid">
+        <div className="live-metric">
+          <small>LIVE HUNTS</small>
+          <strong>{fmt(stats.live_hunts)}</strong>
+          <div className="meter"><i style={{ width: `${huntHeat}%` }} /></div>
+        </div>
+        <div className="live-metric">
+          <small>PLAYERS ONLINE</small>
+          <strong>{fmt(stats.players_online)}</strong>
+          <div className="meter cyan"><i style={{ width: `${Math.min(100, stats.players_online * 8)}%` }} /></div>
+        </div>
+        <div className="live-metric">
+          <small>CHAMELEONS HIDDEN</small>
+          <strong>{fmt(stats.chameleons_hidden)}</strong>
+          <div className="meter green"><i style={{ width: `${hideHeat}%` }} /></div>
+        </div>
+        <div className="live-metric">
+          <small>OPEN LOBBIES</small>
+          <strong>{fmt(stats.open_lobbies)}</strong>
+          <div className="meter amber"><i style={{ width: `${Math.min(100, stats.open_lobbies * 12)}%` }} /></div>
+        </div>
+      </div>
+      <div className="live-level">
+        <div className="live-level-head">
+          <span className="level-chip">SQUAD LV {squadLevel}</span>
+          <strong>{fmt(stats.registered_players)} REGISTERED</strong>
+          <span>{100 - squadRemainder} TO NEXT LV</span>
+        </div>
+        <div className="level-track"><i style={{ width: `${squadProgress}%` }} /></div>
+      </div>
+      <div className="market-quests">
+        <div className="quest-head">
+          <strong>WORLD QUEST</strong>
+          <span>2026 MARKET INTEL</span>
+        </div>
+        <div className="quest-grid">
+          {MARKET_QUESTS.map((quest) => (
+            <div className="quest" key={quest.label}>
+              <small>{quest.label}</small>
+              <strong>{quest.value}</strong>
+              <span>{quest.note}</span>
+              <div className="meter quest-meter"><i style={{ width: `${quest.progress}%` }} /></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function LandingPage() {
   const { user } = useAuth();
   return (
@@ -63,10 +170,10 @@ export default function LandingPage() {
       <AnimatedGameBg />
       <div className="landing-content">
         <section className="hero card huntseek-hero landing-hero">
-          <div className="hero-badge">Meccha Hunt & Seek</div>
+          <div className="hero-badge">Boju-Boju Hunt & Seek</div>
           <h1>BOJU BOJU: Hunt & Seek</h1>
           <p className="hero-lead">Paint. Pose. Blend in. Don’t get caught.</p>
-          <p className="muted">A Meccha Chameleon-inspired 3D multiplayer hide-and-seek. Play as a <strong>Chameleon</strong> to paint your colors, pick a disguise pose, and blend into the arena — or as a <strong>Hunter</strong> to seek and tag anything suspicious.</p>
+          <p className="muted">inspired 3D multiplayer hide-and-seek. Play as a <strong>Chameleon</strong> to paint your colors, pick a disguise pose, and blend into the arena — or as a <strong>Hunter</strong> to seek and tag anything suspicious.</p>
 
           <div className="feature-pills">
             <span className="pill">🎨 Paint & Camouflage</span>
@@ -75,6 +182,8 @@ export default function LandingPage() {
             <span className="pill">👥 Friends vs Others</span>
             <span className="pill">📱 Mobile + Desktop</span>
           </div>
+
+          <LiveCard />
 
           {user ? (
             <div className="stack hero-actions">

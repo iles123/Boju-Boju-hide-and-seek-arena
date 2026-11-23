@@ -8,6 +8,7 @@ from app.api.routes_admin_reports import router as admin_reports_router
 from app.api.routes_auth import router as auth_router
 from app.api.routes_rooms import router as rooms_router
 from app.core.config import settings
+from app.core.demo_seed import ensure_demo_account
 from app.core.rate_limit import rate_limiter
 from app.db.session import Base, engine
 
@@ -18,7 +19,9 @@ async def lifespan(app: FastAPI):
     # (Alembic remains available for managed migrations in later phases.)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await ensure_demo_account()
     await rate_limiter.init()
+
     try:
         yield
     finally:

@@ -8,12 +8,14 @@ from pydantic import BaseModel, Field
 RoundPhase = Literal["lobby", "hiding", "seeking", "ended"]
 RoomStatus = Literal["lobby", "starting", "in_progress"]
 TeamPref = Literal["auto", "seeker", "hider"]
+MapId = Literal["market", "warehouse", "rooftops", "garden", "arcade"]
 
 
 class RoomCreateRequest(BaseModel):
     name: str = Field(min_length=3, max_length=50)
     is_public: bool = True
     password: str | None = Field(default=None, min_length=3, max_length=64)
+    map_id: MapId = "market"
 
 
 class RoomJoinRequest(BaseModel):
@@ -46,6 +48,7 @@ class RoomOut(BaseModel):
     phase: RoundPhase = "lobby"
     phase_ends_at: datetime | None = None
     winner_team: Literal["seekers", "hiders"] | None = None
+    map_id: MapId = "market"
     created_at: datetime
     players: list[RoomPlayerOut] = []
 
@@ -60,6 +63,7 @@ class RoomListItem(BaseModel):
     player_count: int
     status: RoomStatus
     phase: RoundPhase = "lobby"
+    map_id: MapId = "market"
     created_at: datetime
 
 

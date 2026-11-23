@@ -1,4 +1,4 @@
-﻿import { FormEvent, useMemo, useState } from "react";
+﻿import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
@@ -7,6 +7,7 @@ export default function VerifyEmailPage() {
   const [params] = useSearchParams();
   const tokenFromUrl = useMemo(() => params.get("token") ?? "", [params]);
   const [token, setToken] = useState(tokenFromUrl);
+  useEffect(() => setToken(tokenFromUrl), [tokenFromUrl]);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

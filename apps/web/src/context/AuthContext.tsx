@@ -1,11 +1,19 @@
 ﻿import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { api, setAccessToken, tryRefresh, type User } from "../lib/api";
+import { api, setAccessToken, tryRefresh, type ProfileUpdateBody, type User } from "../lib/api";
+
+type GamerProfileInput = {
+  display_name?: string;
+  avatar_color?: string;
+  favorite_map?: string;
+  bio?: string;
+};
 
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, username: string, password: string) => Promise<string | null>;
+  login: (identifier: string, password: string) => Promise<void>;
+  register: (email: string, username: string, password: string, profile?: GamerProfileInput) => Promise<string | null>;
+  updateProfile: (body: ProfileUpdateBody) => Promise<void>;
   logout: () => Promise<void>;
   refreshMe: () => Promise<void>;
 };
@@ -42,16 +50,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       loading,
-      async login(email, password) {
-        const res = await api.login({ email, password });
+      async login(identifier, password) {
+        const res = await api.login({ identifier, password });
+
         setAccessToken(res.access_token);
         setUser(res.user);
       },
-      async register(email, username, password) {
-        const res = await api.register({ email, username, password });
+      async register(email, username, password, profile) {
+        const res = await api.register({ email, username, password, confirm_password: password, ...profile });
         setAccessToken(res.access_token);
         setUser(res.user);
         return "Account created. Check console/dev email logs for verification link/token.";
+      },
+      async updateProfile(body) {
+        setUser(await api.updateProfile(body));
       },
       async logout() {
         try {

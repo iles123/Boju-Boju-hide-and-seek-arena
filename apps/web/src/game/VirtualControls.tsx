@@ -1,21 +1,43 @@
 ﻿import { useEffect, useRef, useState } from "react";
-import { useGameStore } from "./store";
+import { useGameStore, type HiderPose } from "./store";
+import { POSES } from "./paint";
+
+type TouchLayout = "hider" | "seeker" | "sandbox";
+
+const POSE_CYCLE: HiderPose[] = POSES.map((p) => p.id);
 
 function isTouchLike() {
   if (typeof window === "undefined") return false;
-  return "ontouchstart" in window || navigator.maxTouchPoints > 0 || window.matchMedia("(pointer: coarse)").matches;
+  return navigator.maxTouchPoints > 0 || window.matchMedia("(any-pointer: coarse)").matches;
 }
 
 export function VirtualControls({
   showTag,
   canTag,
   onTag,
+  showCombat,
+  showPaint,
+  showTricks,
+  onDecoy,
+  onWhistle,
+  layout = "sandbox",
 }: {
   showTag?: boolean;
   canTag?: boolean;
   onTag?: () => void;
+  showCombat?: boolean;
+  showPaint?: boolean;
+  showTricks?: boolean;
+  onDecoy?: () => void;
+  onWhistle?: () => void;
+  layout?: TouchLayout;
 }) {
   const [enabled, setEnabled] = useState(false);
+  const sprintOn = useGameStore((s) => s.virtual.sprint);
+  const crouchOn = useGameStore((s) => s.virtual.crouch);
+  const proneOn = useGameStore((s) => s.virtual.prone);
+  const lockedOn = useGameStore((s) => s.locked);
+  const pose = useGameStore((s) => s.pose);
   const joyRef = useRef<HTMLDivElement | null>(null);
   const joyId = useRef<number | null>(null);
   const joyOrigin = useRef({ x: 0, y: 0 });
@@ -24,7 +46,14 @@ export function VirtualControls({
   const lookLast = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
-    setEnabled(isTouchLike());
+    const update = () => setEnabled(isTouchLike());
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
   }, []);
 
   useEffect(() => {
@@ -32,6 +61,9 @@ export function VirtualControls({
   }, [enabled]);
 
   if (!enabled) return null;
+
+  const hiderMode = layout === "hider" || (layout === "sandbox" && !!showPaint && !showCombat);
+  const seekerMode = layout === "seeker" || (layout === "sandbox" && (!!showCombat || !!showTag));
 
   const updateMove = (dx: number, dy: number) => {
     const max = 42;
@@ -43,11 +75,12 @@ export function VirtualControls({
     const dead = 10;
     const fx = mag < dead ? 0 : nx / max;
     const fy = mag < dead ? 0 : ny / max;
-    const forward = fy < -0.25;
-    const backward = fy > 0.25;
-    const left = fx < -0.25;
-    const right = fx > 0.25;
-    useGameStore.getState().setVirtual({ forward, backward, left, right });
+    useGameStore.getState().setVirtual({
+      forward: fy < -0.25,
+      backward: fy > 0.25,
+      left: fx < -0.25,
+      right: fx > 0.25,
+    });
   };
 
   const endMove = () => {
@@ -66,22 +99,24 @@ export function VirtualControls({
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     updateMove(e.clientX - cx, e.clientY - cy);
   };
+
   const onJoyMove = (e: React.PointerEvent) => {
     if (joyId.current !== e.pointerId) return;
     updateMove(e.clientX - joyOrigin.current.x, e.clientY - joyOrigin.current.y);
   };
+
   const onJoyUp = (e: React.PointerEvent) => {
     if (joyId.current !== e.pointerId) return;
     endMove();
   };
 
   const onLookDown = (e: React.PointerEvent) => {
-    if (lookId.current != null) return;
-    if (joyId.current === e.pointerId) return;
+    if (lookId.current != null || joyId.current === e.pointerId) return;
     lookId.current = e.pointerId;
     lookLast.current = { x: e.clientX, y: e.clientY };
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
   };
+
   const onLookMove = (e: React.PointerEvent) => {
     if (lookId.current !== e.pointerId) return;
     const dx = e.clientX - lookLast.current.x;
@@ -90,21 +125,50 @@ export function VirtualControls({
     const st = useGameStore.getState();
     st.setVirtual({ lookDeltaX: st.virtual.lookDeltaX + dx, lookDeltaY: st.virtual.lookDeltaY + dy });
   };
+
   const onLookUp = (e: React.PointerEvent) => {
     if (lookId.current !== e.pointerId) return;
     lookId.current = null;
   };
 
+  const cyclePose = () => {
+    const i = POSE_CYCLE.indexOf(pose);
+    useGameStore.getState().setPose(POSE_CYCLE[(i + 1) % POSE_CYCLE.length]);
+  };
+
+  const cycleCamera = () => {
+    const cur = useGameStore.getState().cameraMode;
+    useGameStore.getState().setCameraMode(cur === "first" ? "third" : cur === "third" ? "spectator" : "first");
+  };
+
+  const stanceButtons = (
+    <div className="touch-stance">
+      <button
+        className="touch-btn mini"
+        onPointerDown={() => useGameStore.getState().setVirtual({ jump: true })}
+        onPointerUp={() => useGameStore.getState().setVirtual({ jump: false })}
+        onPointerCancel={() => useGameStore.getState().setVirtual({ jump: false })}
+        onPointerLeave={() => useGameStore.getState().setVirtual({ jump: false })}
+      >Jump</button>
+      <button className={`touch-btn mini ${sprintOn ? "active" : ""}`} onPointerDown={() => useGameStore.getState().setVirtual({ sprint: !sprintOn })}>Sprint</button>
+      <button className={`touch-btn mini ${crouchOn ? "active" : ""}`} onPointerDown={() => useGameStore.getState().setVirtual({ crouch: !crouchOn })}>Crouch</button>
+      <button className={`touch-btn mini ${proneOn ? "active" : ""}`} onPointerDown={() => useGameStore.getState().setVirtual({ prone: !proneOn })}>Prone</button>
+    </div>
+  );
+
   return (
-    <div className="touch-ui" aria-hidden="false">
+    <div className={`touch-ui ${hiderMode ? "hider-layout" : seekerMode ? "seeker-layout" : ""}`} aria-hidden="false">
       <div
         className="touch-look"
         onPointerDown={onLookDown}
         onPointerMove={onLookMove}
         onPointerUp={onLookUp}
         onPointerCancel={onLookUp}
-      />
+      >
+        <span className="touch-look-label">DRAG TO LOOK</span>
+      </div>
       <div className="touch-left">
+        {stanceButtons}
         <div
           ref={joyRef}
           className="touch-joystick"
@@ -114,22 +178,49 @@ export function VirtualControls({
           onPointerCancel={onJoyUp}
         >
           <div className="touch-joystick-base" />
+          <div className="touch-joystick-label">MOVE</div>
           <div className="touch-joystick-knob" style={{ transform: `translate(calc(-50% + ${knob.x}px), calc(-50% + ${knob.y}px))` }} />
         </div>
       </div>
       <div className="touch-right">
         <div className="touch-actions">
-          <button className="touch-btn" onPointerDown={() => useGameStore.getState().setVirtual({ jump: true })} onPointerUp={() => useGameStore.getState().setVirtual({ jump: false })} onPointerCancel={() => useGameStore.getState().setVirtual({ jump: false })} onPointerLeave={() => useGameStore.getState().setVirtual({ jump: false })}>Jump</button>
-          <button className="touch-btn" onPointerDown={() => useGameStore.getState().setVirtual({ sprint: !useGameStore.getState().virtual.sprint })}>Sprint</button>
-          <button className="touch-btn" onPointerDown={() => useGameStore.getState().setVirtual({ crouch: !useGameStore.getState().virtual.crouch })}>Crouch</button>
-          <button className="touch-btn" onPointerDown={() => useGameStore.getState().setLocked(!useGameStore.getState().locked)}>Lock</button>
-          <button className="touch-btn" onPointerDown={() => {
-            const cur = useGameStore.getState().cameraMode;
-            useGameStore.getState().setCameraMode(cur === "first" ? "third" : cur === "third" ? "spectator" : "first");
-          }}>Cam</button>
+          {hiderMode && showPaint && (
+            <>
+              <button className="touch-btn primary" onPointerDown={() => useGameStore.getState().setPaintOpen(!useGameStore.getState().paintOpen)}>Paint</button>
+              <button className="touch-btn" onPointerDown={cyclePose}>Pose</button>
+              <button className="touch-btn" onPointerDown={() => {
+                useGameStore.getState().requestWorldSample();
+                useGameStore.getState().setHoldUpHelper(true);
+              }}>Sample</button>
+              <button className={`touch-btn ${lockedOn ? "active" : ""}`} onPointerDown={() => useGameStore.getState().setLocked(!lockedOn)}>Lock</button>
+            </>
+          )}
+          {hiderMode && showTricks && (
+            <>
+              <button className="touch-btn" onPointerDown={() => onDecoy?.()}>Decoy</button>
+              <button className="touch-btn accent" onPointerDown={() => onWhistle?.()}>Taunt</button>
+            </>
+          )}
+          {seekerMode && showCombat && (
+            <>
+              <button className="touch-btn fire primary" onPointerDown={() => useGameStore.getState().triggerCombatAction("shoot")}>Fire</button>
+              <button className="touch-btn" onPointerDown={() => useGameStore.getState().triggerCombatAction("spot")}>Spot</button>
+              <button className="touch-btn" onPointerDown={() => useGameStore.getState().triggerCombatAction("reload")}>Reload</button>
+            </>
+          )}
           {showTag && <button className={`touch-btn ${canTag ? "accent" : ""}`} onPointerDown={() => { if (canTag) onTag?.(); }}>Tag</button>}
+          {!hiderMode && !seekerMode && (
+            <>
+              {showPaint && <button className="touch-btn" onPointerDown={() => useGameStore.getState().setPaintOpen(!useGameStore.getState().paintOpen)}>Paint</button>}
+              {showTricks && <button className="touch-btn" onPointerDown={() => onDecoy?.()}>Decoy</button>}
+              {showTricks && <button className="touch-btn" onPointerDown={() => onWhistle?.()}>Taunt</button>}
+              {showCombat && <button className="touch-btn fire" onPointerDown={() => useGameStore.getState().triggerCombatAction("shoot")}>Fire</button>}
+              {showCombat && <button className="touch-btn" onPointerDown={() => useGameStore.getState().triggerCombatAction("reload")}>Reload</button>}
+              {showCombat && <button className="touch-btn" onPointerDown={() => useGameStore.getState().triggerCombatAction("spot")}>Spot</button>}
+            </>
+          )}
+          <button className="touch-btn" onPointerDown={cycleCamera}>Cam</button>
         </div>
-        <div className="touch-hint">Drag right side to look | Joystick to move</div>
       </div>
     </div>
   );

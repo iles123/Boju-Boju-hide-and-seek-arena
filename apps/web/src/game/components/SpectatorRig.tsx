@@ -57,7 +57,7 @@ export function SpectatorRig({
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.code === "KeyF") follow.current = !follow.current;
+      if (e.code === "KeyG") follow.current = !follow.current;
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

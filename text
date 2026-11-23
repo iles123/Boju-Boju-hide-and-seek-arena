@@ -1,0 +1,167 @@
+You are a senior game designer and full-stack engineer. Produce a complete Game Design Document
+(GDD) AND then implement it phase by phase (stop after each phase and wait for "next phase").
+The game is an ORIGINAL web-based 3D multiplayer "paint-to-hide" hide-and-seek game, inspired by
+the general idea of painting your own body to blend into the environment. Do not copy any
+existing game's name, characters, maps, assets or UI. Use the stack from my previous spec
+(React + Three.js/React Three Fiber frontend, FastAPI backend, PostgreSQL, WebSockets, LiveKit
+voice, Render deployment).
+
+==================================================
+1. CORE GAMEPLAY
+==================================================
+Teams: HIDERS vs SEEKERS. Up to 20 players per room (10 hiders, 10 seekers). Smaller rooms
+(4-12) must work well; scale map zones and prop density to player count.
+
+Hider character: a plain WHITE low-poly humanoid. Hiders must paint their own body to match the
+surroundings and strike a pose that fits the spot. Unpainted white areas (elbows, hands,
+backs of legs) are the classic way to get caught.
+
+Round flow:
+1. LOBBY: ready up, pick a map vote, customize name/outfit shape (body type only, not color).
+2. PREP PHASE (75s, configurable): hiders explore, choose a spot, paint, and pose. Seekers
+   wait in a sealed spawn room with a countdown and cannot see the map.
+3. SEEK PHASE (5 min, configurable): seekers are released with guns and hunt. Hiders must
+   stay perfectly still to keep their camouflage; moving breaks it (see rules below).
+4. RESULTS: scoreboard, MVP highlights, replay-moment screenshot, return to lobby.
+
+Hider rules:
+- Painting is locked when prep ends (cannot repaint during seek phase).
+- POSE WHEEL: 12 to 15 preset poses (stand, lean on wall, crouch ball, flat on floor, arms
+  up, side profile, hug a pillar, T-pose, etc.), plus a limited "adjust limbs" mode later.
+- LOCK-IN: pressing a key freezes the pose. Moving while seekers are within line of sight
+  makes the hider "shimmer" (a subtle outline) visible to seekers for 2 seconds.
+- Scoring: hiders earn points every second they are inside a seeker's field of view
+  (within 15 m, unobstructed) without being shot. This rewards bold hiding in plain sight.
+- Survival bonus if alive when the timer ends.
+
+Seeker rules:
+- Gun: hitscan, limited ammo (e.g., 12) with slow reload and a short cooldown.
+- Hitting a hider eliminates them. Shooting at a non-hider costs a penalty (lose ammo, a brief
+  slow, or a few HP; make it configurable) so spraying is not viable.
+- Seekers earn points per elimination and for "first spot" assists (pinging a hider for
+  teammates, which still requires a shot to eliminate).
+- Eliminated hiders become spectators with a free-fly camera and a spectator-only voice channel.
+
+Optional game modes (design them, implement later):
+- Tag Mode (no guns, touch to catch), Chaos Mode (everyone hears everyone nearby),
+  Streamer Mode (viewers vote on twists), Speed Round (30 s prep).
+
+==================================================
+2. PAINT SYSTEM (web implementation)
+==================================================
+Design and build a body-painting tool:
+- A paint panel opens with a key (F) and a mirror/preview of the character so the player can
+  see their body from all sides. Rotate the preview with the mouse.
+- Tools: brush (size and softness), eraser, fill bucket, undo/redo (20 steps), symmetry toggle
+  (left/right mirror), full color picker plus a recent-colors strip.
+- EYEDROPPER: pick a color directly from the 3D world by sampling the rendered scene at the
+  crosshair (render-target pixel read). This is the most important tool; make it fast.
+- "Hold-up" helper: a toggle that shows the nearby surface behind the player as a faint overlay
+  so they can match patterns (pattern-matching assist; limited use or disabled in ranked).
+- Body regions: UV-map the character so every part (head, torso, arms, hands, legs, feet) has
+  its own paint area. Highlight unpainted white areas with a warning indicator and show
+  "paint completeness %" so beginners learn the white-elbows lesson.
+- Technical: each hider has a 512x512 canvas texture (256x256 on low quality). Paint locally
+  with no network traffic. When prep ends, compress the texture (PNG or WebP, under ~60 KB),
+  upload it ONCE to the server, and the server relays it to others. During prep, other
+  players see only a white or neutral body, so nobody can copy a painting live.
+- Server validation: max size, rate limits, image format checks, and an automated content check
+  plus a report button for offensive drawings (paint abuse is a real moderation risk). Store a
+  hash and the texture so moderators can review reports.
+- Lighting matters: use lit materials with baked lighting and soft shadows so paint reacts to
+  light like the environment. Seekers must not get a shader advantage; consider subtle film
+  grain on the seeker view so pixel-scanning cheats are harder.
+- Mobile later: touch painting with a simplified tool set.
+
+==================================================
+3. MAPS (design 5 original maps; build 1 first)
+==================================================
+Map design rules (apply to every map):
+- Every map needs PAINT-FRIENDLY richness: a mix of patterns (tiles, wallpaper, wood grain,
+  fabric, graffiti, foliage, mosaics), varied lighting (bright, dim, colored light, shadows),
+  and surfaces of different scales so hiders can blend at many levels of difficulty.
+- Avoid large flat single-color walls everywhere (too easy) and avoid pure visual noise
+  everywhere (too frustrating). Balance both.
+- Size for 20 players: roughly 120 to 180 m across, with multiple floors/zones, at least
+  25 distinct hide zones, and loops so seekers cannot cover everything from one spot.
+- Include "hero spots": two or three iconic hiding places per map people will clip and share.
+- Spawn: sealed seeker room; hiders spread across 6 or more spawn points.
+- Keep scenes light: instanced props, baked lighting, LOD, under ~25 MB per map.
+- Provide a map metadata file (name, size, recommended players, spawn points, hide-zone
+  tags) and server collision data.
+
+Original map concepts (Nigeria-inspired and fun to clip):
+1. "Open-Air Market Street": stalls, fabric rolls, fruit crates, tarpaulins, painted signs,
+   narrow alleys, generator corner. Strong color and pattern variety.
+2. "Wedding Hall": ankara/aso-ebi patterned tablecloths, decor walls, stage, buffet area,
+   colored party lights. Great for bold patterned painting and lighting changes.
+3. "Danfo Bus Depot": buses with graffiti and stripes, tires, oil drums, workshop, rusty
+   metal textures. Good for gritty, high-contrast hiding.
+4. "Old School Compound": classrooms, chalkboards, corridors, field with trees, murals. Mix of
+   indoor and outdoor, beginner-friendly.
+5. "Beach Resort": pool area, cabanas, palms, striped umbrellas, rooftop bar. Bright open
+   light, harder to blend, high-risk and high-reward.
+Also design a MAP EDITOR concept (later phase): glTF import plus zone tagging, so the community
+can submit maps, because community maps extend a hide-and-seek game's life.
+
+==================================================
+4. MIC / VOICE COMMUNICATION
+==================================================
+Provider: LiveKit (FastAPI mints tokens). All channel rules are enforced SERVER-SIDE through
+subscription permissions; never trust clients.
+
+Channels by phase:
+- LOBBY / RESULTS: everyone hears everyone (open).
+- PREP PHASE: hiders hear hiders (full team), seekers hear seekers; no cross-team audio.
+- SEEK PHASE:
+    * Hiders: PROXIMITY voice only among hiders, 3D spatial audio, falloff to silence at
+      ~15 m. Walls muffle sound with a low-pass filter.
+    * Seekers: team radio, all seekers hear each other (optional proximity toggle).
+    * Cross-team: seekers do NOT hear hiders directly. Instead, hider speech creates a
+      NOISE EVENT computed server-side (hidden LiveKit participant reads active-speaker
+      and audio levels). Louder speech means a larger, fuzzier ping direction on the
+      seeker HUD plus a faint muffled spatial sound within ~10 m.
+- SPECTATORS: their own channel; living players never hear them.
+
+Room voice-rule presets (host chooses before the round, shown in the lobby):
+- FAIR (default): rules above.
+- CHAOS: everyone hears everyone in proximity, so hiders near seekers can be heard directly.
+- SILENT HIDERS: hiders cannot speak after prep ends; seekers keep radio.
+- STREAMER: viewers are muted by default; the host can unmute selected viewers.
+
+Controls and safety:
+- Voice listening is OFF/muted by default for new users with a clear prompt to enable it;
+  push-to-talk as default key (V) with an open-mic option.
+- Visible mic icon at the top of the screen when transmitting, and a speaking indicator
+  above players' nameplates only for allowed audiences.
+- Options: disable voice entirely, per-player mute and volume, block, and a "mute all".
+- Report button that stores the last 30 seconds metadata (who, when, which room) for
+  moderators; do not record audio without explicit legal and consent design.
+- Moderators and hosts can mute or kick. Auto-mute players after repeated reports.
+- Minimum age and a safety notice in the terms; clear microphone permission and HTTPS
+  handling with friendly error messages.
+
+==================================================
+5. SOCIAL AND GROWTH FEATURES (design now, build later)
+==================================================
+- Join by link and room codes; public quick-match; public servers list with language tags.
+- Auto-clip system: capture the best moment ("walked past a hider" or "survived 60 s in
+  plain sight") as a 10-second video/GIF with a share button for X.
+- Daily challenge ("Hide as a wall tile in the Wedding Hall"), leaderboards (best
+  camouflage score, most eliminations), cosmetic unlocks (poses, brush effects, hats).
+- Streamer tools: viewer join mode, room overlays, and a spectator-friendly camera.
+
+==================================================
+6. DELIVERABLES AND PHASES
+==================================================
+First output the GDD (one document: gameplay, paint system, maps, voice, scoring, balance
+values in a config table, risks). Then implement in phases, stopping after each:
+Phase A: greybox map + hider paint tool single-player (paint, eyedropper, pose, lock-in)
+Phase B: multiplayer sync of players and the one-time texture upload/relay
+Phase C: round flow, seeker gun, scoring by line-of-sight, eliminations
+Phase D: LiveKit voice with the channel and preset rules, noise pings
+Phase E: first real map (Open-Air Market Street) with art and baked lighting
+Phase F: moderation, reports, content checks for paint, clip capture
+Phase G: more maps, balance tuning from telemetry, launch checklist
+
+Start by writing the GDD and listing any decisions you need from me.

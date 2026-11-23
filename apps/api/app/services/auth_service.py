@@ -3,7 +3,7 @@
 from datetime import timedelta
 
 from fastapi import HTTPException, Request, Response, status
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,12 +18,22 @@ from app.core.security import (
     refresh_cookie_kwargs,
     verify_password,
 )
-from app.models.user import EmailToken, RefreshToken, Report, User, UserStats, WsTicket
+from app.models.user import (
+    EmailToken,
+    GamerProfile,
+    RefreshToken,
+    Report,
+    User,
+    UserStats,
+    WsTicket,
+)
 from app.schemas.auth import (
     AuthResponse,
     ForgotPasswordRequest,
+    GamerProfileOut,
     LoginRequest,
     MessageResponse,
+    ProfileUpdateRequest,
     RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
@@ -52,6 +62,13 @@ def user_to_out(user: User) -> UserOut:
             eliminations=stats.eliminations,
             survival_time_seconds=stats.survival_time_seconds,
         )
+    profile = user.profile
+    profile_out = GamerProfileOut(
+        display_name=profile.display_name if profile else user.username,
+        bio=profile.bio if profile else "",
+        avatar_color=profile.avatar_color if profile else "#22d3ee",
+        favorite_map=profile.favorite_map if profile else "market",
+    )
     return UserOut(
         id=user.id,
         email=user.email,
@@ -63,7 +80,26 @@ def user_to_out(user: User) -> UserOut:
         created_at=user.created_at,
         last_login=user.last_login,
         stats=stats_out,
+        profile=profile_out,
     )
+
+
+async def update_profile(db: AsyncSession, user: User, payload: ProfileUpdateRequest) -> UserOut:
+    profile = user.profile
+    if profile is None:
+        profile = GamerProfile(user_id=user.id)
+        user.profile = profile
+    profile.display_name = payload.display_name.strip() or user.username
+    profile.bio = payload.bio.strip()
+    profile.avatar_color = payload.avatar_color
+    profile.favorite_map = payload.favorite_map
+    profile.updated_at = utcnow()
+    db.add(profile)
+    await db.commit()
+    result = await db.execute(
+        select(User).options(selectinload(User.stats), selectinload(User.profile)).where(User.id == user.id)
+    )
+    return user_to_out(result.scalar_one())
 
 
 async def _enforce_rate_limit(request: Request, scope: str, limit: int, window: int) -> None:
@@ -97,6 +133,12 @@ async def register_user(db: AsyncSession, payload: RegisterRequest, request: Req
         role="player",
     )
     user.stats = UserStats()
+    user.profile = GamerProfile(
+        display_name=payload.display_name.strip() or payload.username,
+        bio=payload.bio.strip(),
+        avatar_color=payload.avatar_color,
+        favorite_map=payload.favorite_map,
+    )
     db.add(user)
     await db.flush()
 
@@ -114,7 +156,7 @@ async def register_user(db: AsyncSession, payload: RegisterRequest, request: Req
     )
 
     # reload with stats
-    result = await db.execute(select(User).options(selectinload(User.stats)).where(User.id == user.id))
+    result = await db.execute(select(User).options(selectinload(User.stats), selectinload(User.profile)).where(User.id == user.id))
     user = result.scalar_one()
 
     await _set_refresh_cookie(db, response, user.id)
@@ -129,10 +171,16 @@ async def register_user(db: AsyncSession, payload: RegisterRequest, request: Req
 async def login_user(db: AsyncSession, payload: LoginRequest, request: Request, response: Response) -> AuthResponse:
     await _enforce_rate_limit(request, "login", limit=20, window=900)
 
-    result = await db.execute(select(User).options(selectinload(User.stats)).where(User.email == str(payload.email).lower()))
+    login_id = payload.login_id.lower()
+    result = await db.execute(
+        select(User).options(selectinload(User.stats), selectinload(User.profile)).where(
+            or_(User.email == login_id, func.lower(User.username) == login_id)
+        )
+    )
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email, username, or password")
+
 
     now = utcnow()
     if user.locked_until and user.locked_until > now:
@@ -146,9 +194,10 @@ async def login_user(db: AsyncSession, payload: LoginRequest, request: Request, 
             user.locked_until = now + timedelta(minutes=LOCKOUT_MINUTES)
             user.failed_login_attempts = 0
         await db.commit()
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email, username, or password")
 
     user.failed_login_attempts = 0
+
     user.locked_until = None
     user.last_login = now
     await db.commit()
@@ -179,7 +228,7 @@ async def refresh_session(db: AsyncSession, request: Request, response: Response
         response.delete_cookie(key=settings.refresh_cookie_name, path="/auth")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-    user_res = await db.execute(select(User).options(selectinload(User.stats)).where(User.id == rt.user_id))
+    user_res = await db.execute(select(User).options(selectinload(User.stats), selectinload(User.profile)).where(User.id == rt.user_id))
     user = user_res.scalar_one_or_none()
     if not user or user.is_banned:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session")

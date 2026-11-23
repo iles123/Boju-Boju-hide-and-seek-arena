@@ -9,6 +9,7 @@ from app.schemas.auth import (
     ForgotPasswordRequest,
     LoginRequest,
     MessageResponse,
+    ProfileUpdateRequest,
     RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
@@ -24,6 +25,7 @@ from app.services.auth_service import (
     refresh_session,
     register_user,
     reset_password,
+    update_profile,
     user_to_out,
     verify_email,
 )
@@ -54,6 +56,11 @@ async def logout(request: Request, response: Response, db: AsyncSession = Depend
 @router.get("/me", response_model=UserOut)
 async def me(current_user: User = Depends(get_current_user)):
     return user_to_out(current_user)
+
+
+@router.patch("/profile", response_model=UserOut)
+async def patch_profile(payload: ProfileUpdateRequest, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_user)):
+    return await update_profile(db, current_user, payload)
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

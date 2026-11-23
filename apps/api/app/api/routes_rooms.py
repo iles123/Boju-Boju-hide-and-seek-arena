@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, status
+from sqlalchemy import func, select
 
 from app.core.deps import get_current_user
 from app.db.session import AsyncSessionLocal
@@ -18,6 +19,14 @@ from app.services.ws_ticket_service import consume_ws_ticket
 router = APIRouter(tags=["rooms"])
 
 
+@router.get("/stats/arena")
+async def arena_stats() -> dict[str, int]:
+    stats = await room_manager.arena_stats()
+    async with AsyncSessionLocal() as db:
+        stats["registered_players"] = int(await db.scalar(select(func.count()).select_from(User)) or 0)
+    return stats
+
+
 @router.get("/rooms", response_model=list[RoomListItem])
 async def list_rooms(_: User = Depends(get_current_user)):
     return await room_manager.list_rooms()
@@ -27,7 +36,7 @@ async def list_rooms(_: User = Depends(get_current_user)):
 async def create_room(payload: RoomCreateRequest, current_user: User = Depends(get_current_user)):
     try:
         return await room_manager.create_room(
-            payload.name, payload.is_public, payload.password, current_user.id, current_user.username
+            payload.name, payload.is_public, payload.password, current_user.id, current_user.username, payload.map_id
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -123,6 +132,21 @@ async def room_ws(websocket: WebSocket, room_id: str, ticket: str):
                 await room_manager.handle_player_state(room_id, user.id, payload)
             elif mtype == "player.tag":
                 await room_manager.handle_player_tag(room_id, user.id, payload)
+            elif mtype == "player.shoot":
+                await room_manager.handle_player_shoot(room_id, user.id, payload)
+            elif mtype == "player.reload":
+                await room_manager.handle_player_reload(room_id, user.id)
+            elif mtype == "player.spot":
+                await room_manager.handle_player_spot(room_id, user.id, payload)
+            elif mtype == "decoy.place":
+                await room_manager.handle_decoy_place(room_id, user.id, payload)
+            elif mtype == "hider.whistle":
+                await room_manager.handle_whistle(room_id, user.id)
+            elif mtype == "paint.upload":
+                try:
+                    await room_manager.handle_paint_upload(room_id, user.id, payload)
+                except ValueError as e:
+                    await websocket.send_json({"type": "error", "payload": {"message": str(e)}})
             elif mtype == "ping":
                 await websocket.send_json({"type": "pong"})
             else:

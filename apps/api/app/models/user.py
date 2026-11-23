@@ -32,6 +32,9 @@ class User(Base):
     stats: Mapped["UserStats"] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    profile: Mapped["GamerProfile | None"] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
     refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
@@ -50,6 +53,23 @@ class UserStats(Base):
     survival_time_seconds: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     user: Mapped[User] = relationship(back_populates="stats")
+
+
+class GamerProfile(Base):
+    __tablename__ = "gamer_profiles"
+
+    user_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    display_name: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    bio: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    avatar_color: Mapped[str] = mapped_column(String(20), default="#22d3ee", nullable=False)
+    favorite_map: Mapped[str] = mapped_column(String(30), default="market", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[User] = relationship(back_populates="profile")
 
 
 class RefreshToken(Base):

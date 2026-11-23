@@ -6,6 +6,13 @@
   survival_time_seconds: number;
 };
 
+export type GamerProfile = {
+  display_name: string;
+  bio: string;
+  avatar_color: string;
+  favorite_map: string;
+};
+
 export type User = {
   id: string;
   email: string;
@@ -17,6 +24,7 @@ export type User = {
   created_at: string;
   last_login: string | null;
   stats: UserStats;
+  profile: GamerProfile;
 };
 
 export type AuthResponse = {
@@ -33,6 +41,17 @@ export type TokenResponse = {
 };
 
 export type MessageResponse = { message: string };
+
+export type ArenaStats = {
+  live_hunts: number;
+  open_lobbies: number;
+  players_online: number;
+  chameleons_hidden: number;
+  hunters_active: number;
+  registered_players: number;
+};
+
+export type MapId = "market" | "warehouse" | "rooftops" | "garden" | "arcade";
 
 export type RoomPlayer = {
   user_id: string;
@@ -59,6 +78,7 @@ export type Room = {
   phase?: "lobby" | "hiding" | "seeking" | "ended";
   phase_ends_at?: string | null;
   winner_team?: "seekers" | "hiders" | null;
+  map_id?: MapId;
   created_at: string;
   players: RoomPlayer[];
 };
@@ -73,6 +93,7 @@ export type RoomListItem = {
   player_count: number;
   status: "lobby" | "starting" | "in_progress";
   phase?: "lobby" | "hiding" | "seeking" | "ended";
+  map_id?: MapId;
   created_at: string;
 };
 
@@ -94,6 +115,10 @@ export function getApiBase() {
 
 export function getWsBase() {
   return API_BASE.replace(/^http/i, "ws");
+}
+
+export async function getArenaStats(): Promise<ArenaStats> {
+  return request<ArenaStats>("/stats/arena", {}, false);
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
@@ -137,13 +162,34 @@ export async function tryRefresh(): Promise<boolean> {
   }
 }
 
+export type RegisterBody = {
+  email: string;
+  username: string;
+  password: string;
+  confirm_password?: string;
+  display_name?: string;
+  bio?: string;
+  avatar_color?: string;
+  favorite_map?: string;
+};
+
+export type ProfileUpdateBody = {
+  display_name: string;
+  bio: string;
+  avatar_color: string;
+  favorite_map: string;
+};
+
 export const api = {
-  register: (body: { email: string; username: string; password: string }) =>
+  register: (body: RegisterBody) =>
     request<AuthResponse>("/auth/register", { method: "POST", body: JSON.stringify(body) }),
-  login: (body: { email: string; password: string }) =>
+  login: (body: { identifier: string; password: string }) =>
+
     request<AuthResponse>("/auth/login", { method: "POST", body: JSON.stringify(body) }),
   logout: () => request<MessageResponse>("/auth/logout", { method: "POST" }),
   me: () => request<User>("/auth/me"),
+  updateProfile: (body: ProfileUpdateBody) =>
+    request<User>("/auth/profile", { method: "PATCH", body: JSON.stringify(body) }),
   forgotPassword: (body: { email: string }) =>
     request<MessageResponse>("/auth/forgot-password", { method: "POST", body: JSON.stringify(body) }),
   resetPassword: (body: { token: string; new_password: string }) =>
@@ -152,7 +198,7 @@ export const api = {
     request<MessageResponse>("/auth/verify-email", { method: "POST", body: JSON.stringify(body) }),
   wsTicket: () => request<{ ticket: string; expires_in: number }>("/auth/ws-ticket", { method: "POST" }),
   listRooms: () => request<RoomListItem[]>("/rooms"),
-  createRoom: (body: { name: string; is_public: boolean; password?: string | null }) =>
+  createRoom: (body: { name: string; is_public: boolean; password?: string | null; map_id?: MapId }) =>
     request<Room>("/rooms", { method: "POST", body: JSON.stringify(body) }),
   joinRoom: (roomId: string, body: { password?: string | null; as_spectator?: boolean } = {}) =>
     request<Room>(`/rooms/${roomId}/join`, { method: "POST", body: JSON.stringify(body) }),

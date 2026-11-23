@@ -1,0 +1,64 @@
+BOJU BOJU ARENA — POSTER + POST COPY
+
+Poster file:
+apps/web/public/boju-boju-poster.svg
+
+Poster URL after deploy:
+https://boju-boju-web.onrender.com/boju-boju-poster.svg
+
+Live game:
+https://boju-boju-web.onrender.com
+
+Demo login:
+Email: demo@bojuboju.com
+Password: demo12345
+(Username also works: DemoHunter)
+
+SHORT POST / X / THREAD OPENER
+
+Paint. Pose. Blend. Survive.
+
+BOJU BOJU Arena is a free browser 3D multiplayer Hunt & Seek where chameleons paint their own bodies to disappear in plain sight, while hunters get 12 shots to find them.
+
+5 maps. 14 poses. Decoys. Blend scoring. Desktop + mobile. No download.
+
+Play: https://boju-boju-web.onrender.com
+Demo: demo@bojuboju.com / demo12345
+
+#IndieGame #WebGame #Multiplayer #HideAndSeek #GameDev #ThreeJS #FastAPI
+
+LONG POST / COMMUNITY POST
+
+Most hide-and-seek games ask you to find a good hiding spot. BOJU BOJU Arena asks a harder question: can you become the spot?
+
+Chameleons paint their body, sample nearby surfaces, pick one of 14 poses, then Lock to blend into the scene. The better your paint coverage, color match, pose, and stillness, the stronger your camouflage — and the harder you are to shimmer out.
+
+Hunters get a gun, limited ammo, spot pings, and a sharp eye. Missed shots cost ammo and slow you down. Decoys look like players but waste bullets. Bold hides inside a hunter's line of sight earn more survival points.
+
+What is in the playable build:
+- 5 original maps: market, warehouse, rooftops, garden, arcade
+- 14 hider poses and 3 body sizes
+- Body painting with brush, fill, eyedropper, undo/redo, and paint completeness
+- World color sampling so your body can match nearby props
+- Lock/Blend system with a visible blend score
+- Painted decoys, whistles, shimmer tells, and line-of-sight scoring
+- Gamer profiles, stats, room codes, quick match, and spectators
+- Desktop and touch controls
+
+The global games market is projected at $213.9B in 2026 with 3.70B players, and mobile makes up 57% of revenue ($121.1B). BOJU BOJU is built web-first for that reality: instant browser access, low-friction sharing, and a format that is easy to clip and invite friends into.
+
+Try it free: https://boju-boju-web.onrender.com
+Demo login: demo@bojuboju.com / demo12345
+
+Poster: https://boju-boju-web.onrender.com/boju-boju-poster.svg
+
+Data source:
+Newzoo 2026 Global Games Market key numbers and executive summary:
+https://newzoo.com/articles/2026-global-games-market-key-numbers
+https://newzoo.com/articles/executive-summary-ggmr-2026-free-edition
+
+#IndieGame #WebGame #Multiplayer #HideAndSeek #GameDev #ThreeJS #FastAPI #BrowserGame
+
+SHORT CAPTION FOR THE POSTER IMAGE
+
+POV: the crate is not a crate. BOJU BOJU Arena is live — paint yourself into the map and dare the hunters to shoot. Play free in your browser: https://boju-boju-web.onrender.com

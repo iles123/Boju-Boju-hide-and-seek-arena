@@ -9,6 +9,7 @@ export type InputState = {
   jump: boolean;
   sprint: boolean;
   crouch: boolean;
+  prone: boolean;
 };
 
 const initial: InputState = {
@@ -19,6 +20,7 @@ const initial: InputState = {
   jump: false,
   sprint: false,
   crouch: false,
+  prone: false,
 };
 
 function isTypingTarget(target: EventTarget | null) {
@@ -46,6 +48,7 @@ export function useKeyboardInput() {
           case "ShiftLeft":
           case "ShiftRight": next.sprint = down; break;
           case "KeyC": next.crouch = down; break;
+          case "KeyZ": next.prone = down; break;
           default: return prev;
         }
         return next;
@@ -72,5 +75,6 @@ export function useKeyboardInput() {
     jump: keys.jump || virtual.jump,
     sprint: keys.sprint || virtual.sprint,
     crouch: keys.crouch || virtual.crouch,
+    prone: keys.prone || virtual.prone,
   };
 }

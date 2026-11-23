@@ -3,9 +3,31 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { api, getWsBase, type Room } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { RoomArena } from "../game/RoomArena";
+import { useGameStore } from "../game/store";
 
 type WsMsg = { type?: string; roomId?: string; payload?: unknown };
-type RemotePlayerState = { user_id?: string; username?: string; team?: string; alive?: boolean; is_spectator?: boolean; x?: number; y?: number; z?: number; yaw?: number; pitch?: number; mode?: string; locked?: boolean; paintColor?: string; pose?: string };
+type RemotePlayerState = { user_id?: string; username?: string; team?: string; alive?: boolean; is_spectator?: boolean; x?: number; y?: number; z?: number; yaw?: number; pitch?: number; mode?: string; locked?: boolean; paintColor?: string; tintColor?: string; camoScore?: number; pose?: string; size?: string };
+type DecoyState = { id?: string; owner_id?: string; username?: string; x?: number; y?: number; z?: number; yaw?: number; paintColor?: string; tintColor?: string; camoScore?: number; pose?: string; size?: string; locked?: boolean; dataUrl?: string };
+
+function playWhistle(forced: boolean) {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(forced ? 880 : 1180, ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(forced ? 1320 : 1560, ctx.currentTime + 0.16);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.09, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+    osc.onended = () => void ctx.close();
+  } catch {
+    return;
+  }
+}
 
 export default function RoomPage() {
   const { roomId } = useParams();
@@ -17,6 +39,11 @@ export default function RoomPage() {
   const [error, setError] = useState<string | null>(null);
   const [inArena, setInArena] = useState(false);
   const [remoteStates, setRemoteStates] = useState<Record<string, RemotePlayerState>>({});
+  const [remotePaintTextures, setRemotePaintTextures] = useState<Record<string, string>>({});
+  const [scores, setScores] = useState<Record<string, number>>({});
+  const [shimmerIds, setShimmerIds] = useState<Record<string, number>>({});
+  const [shots, setShots] = useState<Array<{ id: number; at: number; origin: number[]; direction: number[]; hit: boolean }>>([]);
+  const [decoys, setDecoys] = useState<DecoyState[]>([]);
   const [roundEvent, setRoundEvent] = useState<string | null>(null);
   const [joinPassword, setJoinPassword] = useState("");
   const [joining, setJoining] = useState(false);
@@ -24,12 +51,25 @@ export default function RoomPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const closingRef = useRef(false);
   const mountedRef = useRef(true);
+  const lastPhaseRef = useRef<string | null>(null);
+  const copyTimerRef = useRef<number | null>(null);
 
   const myPlayer = useMemo(() => room?.players.find((p) => p.user_id === user?.id) ?? null, [room, user?.id]);
 
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => {
+      mountedRef.current = false;
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const cutoff = Date.now() - 700;
+      setShots((prev) => prev.filter((s) => s.at > cutoff));
+    }, 250);
+    return () => window.clearInterval(t);
   }, []);
 
   const closeWs = () => {
@@ -78,16 +118,80 @@ export default function RoomPage() {
             const ph = nextRoom?.phase;
             if (ph === "hiding" || ph === "seeking") setInArena(true);
             if (ph === "lobby") setInArena(false);
+            if (ph && ph !== lastPhaseRef.current && (ph === "lobby" || ph === "hiding")) {
+              setRemotePaintTextures({});
+              setShots([]);
+              setDecoys([]);
+              setScores({});
+              useGameStore.getState().setScore(0);
+              useGameStore.getState().setGunState({ ammo: 12, reloading: false, reload_remaining: 0, slow_remaining: 0, cooldown_remaining: 0 });
+            }
+            lastPhaseRef.current = ph ?? null;
           }
           if (msg.type === "player.snapshot") {
             const players = Array.isArray(payload?.players) ? (payload.players as RemotePlayerState[]) : [];
             const map: Record<string, RemotePlayerState> = {};
             for (const p of players) if (p?.user_id) map[p.user_id] = p;
             setRemoteStates(map);
+            const tex = payload?.paint_textures;
+            if (tex && typeof tex === "object") {
+              const next: Record<string, string> = {};
+              for (const [uid, url] of Object.entries(tex)) if (typeof url === "string") next[uid] = url;
+              setRemotePaintTextures(next);
+            }
+            if (Array.isArray(payload?.decoys)) setDecoys(payload.decoys as DecoyState[]);
           }
           if (msg.type === "player.state") {
             const p = payload as RemotePlayerState | undefined;
             if (p?.user_id) setRemoteStates((prev) => ({ ...prev, [p.user_id as string]: p }));
+          }
+          if (msg.type === "paint.applied") {
+            const uid = typeof payload?.user_id === "string" ? payload.user_id : null;
+            const url = typeof payload?.dataUrl === "string" ? payload.dataUrl : null;
+            if (uid && url) setRemotePaintTextures((prev) => ({ ...prev, [uid]: url }));
+          }
+          if (msg.type === "decoy.placed" && payload) {
+            const decoy = payload as DecoyState;
+            if (decoy.id) setDecoys((prev) => [...prev.filter((d) => d.id !== decoy.id), decoy]);
+            if (decoy.owner_id === user?.id) setRoundEvent("Decoy placed. It looks like you, but hunters can shoot it apart.");
+          }
+          if (msg.type === "decoy.destroyed") {
+            const id = typeof payload?.id === "string" ? payload.id : null;
+            if (id) setDecoys((prev) => prev.filter((d) => d.id !== id));
+            if (payload?.by_id === user?.id) setRoundEvent("Decoy destroyed — no hider was caught.");
+          }
+          if (msg.type === "hider.whistle") {
+            const uid = typeof payload?.user_id === "string" ? payload.user_id : null;
+            const forced = payload?.forced === true;
+            playWhistle(forced);
+            setRoundEvent(forced ? "A chameleon's whistle gave them away!" : uid === user?.id ? "Whistle sent — forced-taunt timer reset." : "A chameleon whistled nearby.");
+          }
+          if (msg.type === "gun.state") {
+            if (payload) useGameStore.getState().setGunState(payload as { ammo?: number; reloading?: boolean; reload_remaining?: number; slow_remaining?: number; cooldown_remaining?: number });
+          }
+          if (msg.type === "gun.fired") {
+            const origin = Array.isArray(payload?.origin) ? (payload.origin as number[]).map(Number) : null;
+            const direction = Array.isArray(payload?.direction) ? (payload.direction as number[]).map(Number) : null;
+            if (origin?.length === 3 && direction?.length === 3) {
+              const at = Date.now();
+              const id = at + Math.random();
+              setShots((prev) => [...prev.filter((s) => at - s.at < 700), { id, at, origin, direction, hit: !!payload?.hit }]);
+              if (payload?.shooter_id === user?.id && !payload?.hit) setRoundEvent("Missed! Ammo penalty applied.");
+              if (payload?.shooter_id === user?.id && payload?.hit) setRoundEvent("Hit confirmed!");
+            }
+          }
+          if (msg.type === "score.update") {
+            const next = (payload?.scores && typeof payload.scores === "object" ? payload.scores : {}) as Record<string, number>;
+            setScores(next);
+            if (user?.id && typeof next[user.id] === "number") useGameStore.getState().setScore(next[user.id]);
+          }
+          if (msg.type === "hider.shimmer") {
+            const uid = typeof payload?.user_id === "string" ? payload.user_id : null;
+            if (uid) setShimmerIds((prev) => ({ ...prev, [uid]: Date.now() + 2000 }));
+          }
+          if (msg.type === "player.ping") {
+            const target = typeof payload?.target_id === "string" ? payload.target_id : null;
+            setRoundEvent(payload?.first === true ? `Spot ping confirmed: ${target?.slice(0, 6) || "hider"} (+25)` : "Spot ping shared with hunters.");
           }
           if (msg.type === "player.eliminated") {
             const t = typeof payload?.target_id === "string" ? payload.target_id : null;
@@ -173,7 +277,11 @@ export default function RoomPage() {
     } catch {
       setCopyMsg(`Share this link/code with friends: ${link} (Room code: ${roomId})`);
     }
-    setTimeout(() => setCopyMsg(null), 4000);
+    if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopyMsg(null);
+      copyTimerRef.current = null;
+    }, 4000);
   }
 
   if (!roomId) return <div className="page"><p>Missing room id.</p></div>;
@@ -248,8 +356,8 @@ export default function RoomPage() {
             <p className="muted small">Friends vs others: share the room code/link so your group joins the same room, pick preferred roles (Chameleon/Hunter) to coordinate (balanced automatically), then play together against other players. Minimum 4 active players to start.</p>
 
             {inArena && (
-              <div style={{ height: "min(70vh, 620px)", minHeight: 420, borderRadius: 8, overflow: "hidden", border: "1px solid #334155", position: "relative" }}>
-                <RoomArena room={room} meId={user?.id || ""} myPlayer={myPlayer} remoteStates={remoteStates} send={send} />
+              <div className="arena-shell" style={{ height: "min(70vh, 620px)", minHeight: 420, borderRadius: 8, overflow: "hidden", border: "1px solid #334155", position: "relative" }}>
+                <RoomArena room={room} meId={user?.id || ""} myPlayer={myPlayer} remoteStates={remoteStates} remotePaintTextures={remotePaintTextures} decoys={decoys} scores={scores} shimmerIds={shimmerIds} shots={shots} notice={roundEvent} send={send} />
               </div>
             )}
 

@@ -1,6 +1,7 @@
 ﻿import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
+import { AnimatedGameBg } from "./LandingPage";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -22,13 +23,19 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="page">
-      <form className="card form" onSubmit={onSubmit}>
+    <div className="auth-wrap">
+      <AnimatedGameBg compact />
+      <form className="card form auth-card" onSubmit={onSubmit}>
+        <div className="auth-badge">BOJU BOJU ARENA</div>
         <h2>Forgot Password</h2>
+        <p className="muted small">Enter the email on your gamer account and we will print a reset token in the dev console.</p>
         {error && <p className="error">{error}</p>}
         {msg && <p className="info">{msg}</p>}
-        <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>
+        <label>Email<input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="demo@bojuboju.com" autoComplete="email" required /></label>
         <button className="btn" disabled={busy} type="submit">{busy ? "Sending..." : "Send reset link"}</button>
+        {import.meta.env.DEV && (
+          <button className="link-btn" type="button" onClick={() => setEmail("demo@bojuboju.com")}>Use local demo email</button>
+        )}
         <p className="muted small"><Link to="/signin">Back to sign in</Link></p>
       </form>
     </div>
