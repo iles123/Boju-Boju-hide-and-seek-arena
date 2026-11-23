@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: boju-boju-arena-api
+    name: boju-boju-api-uc5f
     runtime: python
     pythonVersion: "3.12"
     region: oregon
@@ -22,7 +22,7 @@ services:
       - key: WEB_BASE_URL
         value: https://boju-boju-web.onrender.com
       - key: API_BASE_URL
-        value: https://boju-boju-arena-api.onrender.com
+        value: https://boju-boju-api-uc5f.onrender.com
       - key: REFRESH_COOKIE_SECURE
         value: "true"
       - key: REFRESH_COOKIE_SAMESITE
@@ -47,4 +47,4 @@ services:
         value: nosniff
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://boju-boju-arena-api.onrender.com
+        value: https://boju-boju-api-uc5f.onrender.com
