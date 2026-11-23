@@ -583,6 +583,13 @@ export function RoomArena({ room, meId, myPlayer, remoteStates, remotePaintTextu
         </div>
         {(eventMsg || notice) && <div className="game-locked" style={{ top: 86 }}>{eventMsg || notice}</div>}
         {canTagNow && seekerCanTag && <div className="game-locked pulse-danger" style={{ top: 128, background: "rgba(220,38,38,0.92)" }}>Target nearby! Aim & fire (Q pings for your team)</div>}
+        {seekerCanTag && (
+          <div className={`hunter-fire-guide ${hudOpen ? "mobile-sheet-open" : ""}`}>
+            <strong>HUNTER CONTROLS — AIM &amp; FIRE</strong>
+            <span className="hunter-guide-desktop">Left click to shoot • R reload • Right click or Q to ping teammates</span>
+            <span className="hunter-guide-mobile">Drag look area to aim • FIRE button to shoot • RELOAD button</span>
+          </div>
+        )}
         <div className="game-crosshair">+</div>
 
         {role === "hider" && myPlayer?.alive !== false && (
