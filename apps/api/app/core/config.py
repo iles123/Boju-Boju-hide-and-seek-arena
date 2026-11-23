@@ -1,6 +1,14 @@
 ﻿from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def async_database_url(url: str) -> str:
+    if url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[len("postgres://") :]
+    elif url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+    return url.replace("sslmode=require", "ssl=require")
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

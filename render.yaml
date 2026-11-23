@@ -9,6 +9,7 @@ services:
   - type: web
     name: boju-boju-api
     runtime: python
+    pythonVersion: "3.12"
     region: oregon
     plan: free
     rootDir: apps/api
