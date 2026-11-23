@@ -4,6 +4,17 @@ import * as THREE from "three";
 import { useKeyboardInput } from "../useKeyboardInput";
 import { useGameStore } from "../store";
 
+const MAP_LIMIT = 38;
+const CAMERA_MIN_HEIGHT = 0.8;
+const CAMERA_MAX_HEIGHT = 4.5;
+
+function clampToArena(position: THREE.Vector3) {
+  position.x = THREE.MathUtils.clamp(position.x, -MAP_LIMIT, MAP_LIMIT);
+  position.y = THREE.MathUtils.clamp(position.y, CAMERA_MIN_HEIGHT, CAMERA_MAX_HEIGHT);
+  position.z = THREE.MathUtils.clamp(position.z, -MAP_LIMIT, MAP_LIMIT);
+  return position;
+}
+
 export function SpectatorRig({
   yawRef,
   pitchRef,
@@ -21,7 +32,7 @@ export function SpectatorRig({
 
   useEffect(() => {
     if (mode === "spectator") {
-      camera.position.copy(pos.current);
+      camera.position.copy(clampToArena(pos.current));
     }
   }, [mode, camera]);
 
@@ -50,6 +61,7 @@ export function SpectatorRig({
       const target = new THREE.Vector3(0, 6, 20);
       pos.current.lerp(target, 1 - Math.pow(0.001, dt));
     }
+    clampToArena(pos.current);
     camera.position.copy(pos.current);
     const lookAt = pos.current.clone().add(forward);
     camera.lookAt(lookAt);

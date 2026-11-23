@@ -428,15 +428,16 @@ export function PlayerRig({
       );
       camera.lookAt(camera.position.clone().add(lookDir));
     } else {
-      const target = new THREE.Vector3(pos.x, baseY + Math.max(0.6, eye - 0.3), pos.z);
+      const target = new THREE.Vector3(pos.x, baseY + Math.max(0.6, eye + 0.2), pos.z);
       const proneish = dims.camoShape === "prone";
-      const dist = proneish ? 3.6 : 4.7;
+      const dist = proneish ? 5.0 : 7.5;
       const dirCam = new THREE.Vector3(
         Math.sin(yawRef.current) * Math.cos(pitchRef.current),
         -Math.sin(pitchRef.current),
         Math.cos(yawRef.current) * Math.cos(pitchRef.current),
       ).normalize();
       let desired = target.clone().add(dirCam.multiplyScalar(dist));
+      desired.y = Math.max(0.8, desired.y + 1.0);
       const toDesired = desired.clone().sub(target);
       const len = toDesired.length();
       if (len > 0.001) {
@@ -447,7 +448,7 @@ export function PlayerRig({
         );
         const hit2 = world.castRay(ray2, len, true);
         if (hit2) {
-          desired = target.clone().add(toDesired.multiplyScalar(Math.max(0.55, hit2.timeOfImpact - 0.22)));
+          desired = target.clone().add(toDesired.multiplyScalar(Math.max(2.2, hit2.timeOfImpact - 0.22)));
         }
       }
       const camLerp = 1 - Math.pow(0.00045, dt);
