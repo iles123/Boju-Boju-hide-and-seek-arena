@@ -4,6 +4,7 @@ import { api, getWsBase, type Room } from "../lib/api";
 import { useAuth } from "../context/AuthContext";
 import { RoomArena } from "../game/RoomArena";
 import { useGameStore } from "../game/store";
+import { RoomVoice } from "../components/RoomVoice";
 
 type WsMsg = { type?: string; roomId?: string; payload?: unknown };
 type RemotePlayerState = { user_id?: string; username?: string; team?: string; alive?: boolean; is_spectator?: boolean; x?: number; y?: number; z?: number; yaw?: number; pitch?: number; mode?: string; locked?: boolean; paintColor?: string; tintColor?: string; camoScore?: number; pose?: string; size?: string };
@@ -308,6 +309,7 @@ export default function RoomPage() {
         {error && <p className="error">{error}</p>}
         {copyMsg && <p className="info">{copyMsg}</p>}
         {roundEvent && <p className="info">{roundEvent}</p>}
+        {room && <RoomVoice roomId={roomId} username={user?.username} />}
 
         {needsPasswordRetry && (
           <div className="row">

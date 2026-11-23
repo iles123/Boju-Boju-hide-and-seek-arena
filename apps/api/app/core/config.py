@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     email_provider: str = "console"
     email_from: str = "no-reply@boju-boju.local"
 
+    livekit_url: str = ""
+    livekit_api_key: str = ""
+    livekit_api_secret: str = ""
+
+    @property
+    def voice_enabled(self) -> bool:
+        return bool(self.livekit_url and self.livekit_api_key and self.livekit_api_secret)
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

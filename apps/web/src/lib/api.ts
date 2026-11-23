@@ -42,6 +42,10 @@ export type TokenResponse = {
 
 export type MessageResponse = { message: string };
 
+export type VoiceConfig = { enabled: boolean };
+
+export type VoiceToken = { token: string; url: string };
+
 export type ArenaStats = {
   live_hunts: number;
   open_lobbies: number;
@@ -119,6 +123,10 @@ export function getWsBase() {
 
 export async function getArenaStats(): Promise<ArenaStats> {
   return request<ArenaStats>("/stats/arena", {}, false);
+}
+
+export async function getVoiceConfig(): Promise<VoiceConfig> {
+  return request<VoiceConfig>("/voice/config", {}, false);
 }
 
 async function request<T>(path: string, init: RequestInit = {}, retry = true): Promise<T> {
@@ -204,4 +212,6 @@ export const api = {
     request<Room>(`/rooms/${roomId}/join`, { method: "POST", body: JSON.stringify(body) }),
   leaveRoom: (roomId: string) => request<{ ok: boolean }>(`/rooms/${roomId}/leave`, { method: "POST" }),
   quickMatch: () => request<{ room: Room; joined: boolean }>("/rooms/quick-match", { method: "POST" }),
+  voiceToken: (roomId: string) =>
+    request<VoiceToken>(`/voice/token?room_id=${encodeURIComponent(roomId)}`, { method: "POST" }),
 };

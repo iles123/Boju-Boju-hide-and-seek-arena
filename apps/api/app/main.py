@@ -7,6 +7,7 @@ import app.models.user  # noqa: F401 - register models with Base metadata
 from app.api.routes_admin_reports import router as admin_reports_router
 from app.api.routes_auth import router as auth_router
 from app.api.routes_rooms import router as rooms_router
+from app.api.routes_voice import router as voice_router
 from app.core.config import settings
 from app.core.rate_limit import rate_limiter
 from app.db.session import Base, engine
@@ -40,6 +41,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(admin_reports_router)
 app.include_router(rooms_router)
+app.include_router(voice_router)
 
 
 @app.get("/health")
